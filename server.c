@@ -161,7 +161,7 @@ int main(int argc, char** argv)
                 }
 
 
-                if(strncmp(client->method, "GET", 3) == 0 || strncmp(client->method, "HEAD", 4) == 0)
+                if(strncmp(client->method, "GET", 3) == 0 || strncmp(client->method, "HEAD", 4) == 0 || strncmp(client->method, "OPTIONS", 7) == 0 || strncmp(client->method, "TRACE", 5) == 0)
                 {
                     if(send_response(client) < 0)
                     {
@@ -173,18 +173,7 @@ int main(int argc, char** argv)
                         continue;
                     }
                 }
-                else if(strncmp(client->method, "OPTIONS", 7) == 0)
-                {
-                    if(send_options(client) < 0)
-                    {
-                        send_error(500, client->client_fd);
-                        printf("Unexpected error\n");
-                        free(client->full_path);
-                        free(client);
-                        client_sockets[i] = 0;
-                        continue;
-                    }
-                }
+
 
                 if(!client->connection_status)
                 {
@@ -205,6 +194,8 @@ int main(int argc, char** argv)
 
 struct Client* init_request(char* request, int client_fd)
 {
+    char* cpy_request = strdup(request);
+
     struct Client* client = malloc(sizeof(struct Client));
     if(!client)
     {
@@ -216,7 +207,6 @@ struct Client* init_request(char* request, int client_fd)
     memset(client, 0, sizeof(struct Client));
 
     char* tokptr;
-
     char *line = NULL;   
 
     line = strtok_r(request, "\r\n", &tokptr);
@@ -236,8 +226,18 @@ struct Client* init_request(char* request, int client_fd)
     {
         printf("Parse Error: Method\n");
         send_error(400, client_fd);
+        free(cpy_request);
         free(client);
         return NULL;
+    }
+    else if(strncmp(client->method, "TRACE", 5) == 0)
+    {
+        printf("Requested TRACE\n");
+        client->request = cpy_request;
+    }
+    else
+    {
+        free(cpy_request);
     }
 
     str = strtok_r(NULL, " ", &headptr);
@@ -267,6 +267,8 @@ struct Client* init_request(char* request, int client_fd)
         free(client);
         return NULL;
     }
+
+    client->connection_status = 1;
 
     while((line = strtok_r(NULL, "\r\n", &tokptr)) != NULL)
     {
@@ -382,12 +384,12 @@ int process_request(struct Client* client)
         return -1;
     }
     
-    if(strncmp(client->method, "HEAD", 4) == 0)
+    if(strncmp(client->method, "OPTIONS", 7) == 0 || strncmp(client->method, "TRACE", 5) == 0)
     {
-        printf("Head Request - Returning nothing...\n");
+        printf("Control Methods\n");
         return 0;
     }
-    else if(strncmp(client->method, "GET", 3) != 0 && strncmp(client->method, "HEAD", 4) != 0)
+    if(strncmp(client->method, "GET", 3) != 0 && strncmp(client->method, "HEAD", 4) != 0)
     {
         printf("Not Implemented\n");
         send_error(501, client->client_fd);
@@ -456,7 +458,50 @@ int process_request(struct Client* client)
 
 int send_response(struct Client* client) 
 {
+    char headers[MAX_RESPONSE];
+    int header_len = 0;
+    memset(headers, 0, sizeof(headers));
+
     char* date = get_time(0);
+
+    if(strncmp(client->method, "OPTIONS", 7) == 0)
+    {
+        header_len += sprintf(headers + header_len, "HTTP/1.1 204 No Content\r\n");
+        header_len += sprintf(headers + header_len, "Allow: GET, HEAD, OPTIONS, TRACE\r\n");
+        header_len += sprintf(headers + header_len, "Date: %s\r\n", date);
+        header_len += sprintf(headers + header_len, "Server: Snap/0.1\r\n");
+        header_len += sprintf(headers + header_len, "Connection: keep-alive\r\n\r\n");
+
+        if(send(client->client_fd, headers, header_len, 0) < 0)
+        {
+            printf("Error sending response\n");
+        }
+        printf("Response:\n%s\n", headers);
+
+        free(date);
+        return 0;
+    }
+
+    if(strncmp(client->method, "TRACE", 5) == 0)
+    {
+        header_len += sprintf(headers + header_len, "HTTP/1.1 200 OK\r\n");
+        header_len += sprintf(headers + header_len, "Content-Length: %d\r\n", strlen(client->request));
+        header_len += sprintf(headers + header_len, "Date: %s\r\n", date);
+        header_len += sprintf(headers + header_len, "Server: Snap/0.1\r\n");
+        header_len += sprintf(headers + header_len, "Content-Type: message/http\r\n\r\n");
+
+        header_len += sprintf(headers + header_len, client->request);
+
+        if(send(client->client_fd, headers, header_len, 0) < 0)
+        {
+            printf("Error sending response\n");
+        }
+        printf("Response:\n%s\n", headers);
+
+        free(date);
+        return 0;
+    }
+
     char* week_date = get_time(7 * 24 * 60 * 60);
     
     char* file_type = content_type(client->full_path);
@@ -468,17 +513,16 @@ int send_response(struct Client* client)
         free(week_date);
         return -1;
     }
-
-    char headers[MAX_RESPONSE];
-    int header_len = 0;
     
     header_len += sprintf(headers + header_len, "HTTP/1.1 200 OK\r\n");
     header_len += sprintf(headers + header_len, "Accept-Ranges: bytes\r\n");
     header_len += sprintf(headers + header_len, "Content-Type: %s\r\n", file_type);
     header_len += sprintf(headers + header_len, "Date: %s\r\n", date);
-    header_len += sprintf(headers + header_len, "Expires: %s\r\n", date);
+    header_len += sprintf(headers + header_len, "Expires: %s\r\n", week_date);
     header_len += sprintf(headers + header_len, "Last-Modified: Sat, 4 Mar 2025 10:18:33 GMT\r\n");
     header_len += sprintf(headers + header_len, "Server: Snap/0.1\r\n");
+    if(client->connection_status)
+        header_len += sprintf(headers + header_len, "Connection: keep-alive\r\n");
     
     //send headers seperately from data
     if(strncmp(client->method, "GET", 3) == 0) 

@@ -22,7 +22,6 @@
 struct Client* init_request(char*, int);
 int process_request(struct Client*);
 int send_response(struct Client*);
-int send_options(struct Client*);
 char* get_time(int);
 char* content_type(char*);
 int send_error(int, int);
@@ -55,4 +54,5 @@ struct Client
     char* language;
 
     char* priority;
+    char* request;
 };
