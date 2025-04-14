@@ -469,7 +469,7 @@ int send_response(struct Client* client)
         header_len += sprintf(headers + header_len, "HTTP/1.1 204 No Content\r\n");
         header_len += sprintf(headers + header_len, "Allow: GET, HEAD, OPTIONS, TRACE\r\n");
         header_len += sprintf(headers + header_len, "Date: %s\r\n", date);
-        header_len += sprintf(headers + header_len, "Server: Snap/0.1\r\n");
+        header_len += sprintf(headers + header_len, "Server: %s\r\n", SERVER);
         header_len += sprintf(headers + header_len, "Connection: keep-alive\r\n\r\n");
 
         if(send(client->client_fd, headers, header_len, 0) < 0)
@@ -487,7 +487,7 @@ int send_response(struct Client* client)
         header_len += sprintf(headers + header_len, "HTTP/1.1 200 OK\r\n");
         header_len += sprintf(headers + header_len, "Content-Length: %d\r\n", strlen(client->request));
         header_len += sprintf(headers + header_len, "Date: %s\r\n", date);
-        header_len += sprintf(headers + header_len, "Server: Snap/0.1\r\n");
+        header_len += sprintf(headers + header_len, "Server: %s\r\n", SERVER);
         header_len += sprintf(headers + header_len, "Content-Type: message/http\r\n\r\n");
 
         header_len += sprintf(headers + header_len, client->request);
@@ -520,7 +520,7 @@ int send_response(struct Client* client)
     header_len += sprintf(headers + header_len, "Date: %s\r\n", date);
     header_len += sprintf(headers + header_len, "Expires: %s\r\n", week_date);
     header_len += sprintf(headers + header_len, "Last-Modified: Sat, 4 Mar 2025 10:18:33 GMT\r\n");
-    header_len += sprintf(headers + header_len, "Server: Snap/0.1\r\n");
+    header_len += sprintf(headers + header_len, "Server: %s\r\n", SERVER);
     if(client->connection_status)
         header_len += sprintf(headers + header_len, "Connection: keep-alive\r\n");
     
@@ -611,6 +611,32 @@ char* content_type(char* filepath)
         return NULL;
 
     return type;
+}
+
+int master_log(int code, struct Client* client)
+{
+    int fd = open("/home/remote/server/debug.txt", O_CREAT | O_APPEND | O_WRONLY);
+    if(fd < 0)
+    {
+        printf("fd open error in log\n");
+        return -1;
+    }
+
+    char* date = get_date(0);
+    char* response = malloc(MAXLINE);
+
+    sprintf("%s, %s:%d, %d, %s", date, client->client_ip, client->port, code, client->full_path);
+
+    if(write(fd, response, sizeof(response)) < 0)
+    {
+        printf("Write error in log\n");
+        return -1;
+    }
+
+    free(response);
+    free(date);
+
+    return 1;
 }
 
 /*

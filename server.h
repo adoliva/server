@@ -19,6 +19,8 @@
 #define MAX_RESPONSE 32300
 #define MAX_CLIENTS 10
 
+#define SERVER "Snap/0.1"
+
 struct Client* init_request(char*, int);
 int process_request(struct Client*);
 int send_response(struct Client*);
