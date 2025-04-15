@@ -26,12 +26,16 @@ int process_request(struct Client*);
 int send_response(struct Client*);
 char* get_time(int);
 char* content_type(char*);
+int master_log(int, struct Client*);
 int send_error(int, int);
 
 int SIGNAL_FLAG = 0;
 
 struct Client
 {
+    char* client_ip;
+    int client_port;
+
     int client_fd;
     int fd;
     char* full_path;

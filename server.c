@@ -151,6 +151,8 @@ int main(int argc, char** argv)
                     continue;
                 }
                 client->client_fd = client_sockets[i];
+                client->client_ip = inet_ntoa(client_addr.sin_addr);
+                client->client_port = ntohs(client_addr.sin_port);
 
                 client->fd = process_request(client);
                 if(client->fd < 0)
@@ -166,6 +168,7 @@ int main(int argc, char** argv)
                     if(send_response(client) < 0)
                     {
                         send_error(406, client->client_fd);
+                        master_log(406, client);
                         printf("Does not accept filetype(s) html, svg, jpeg\n");
                         free(client->full_path);
                         free(client);
@@ -215,6 +218,7 @@ struct Client* init_request(char* request, int client_fd)
     {
         printf("Empty Request\n");
         send_error(400, client_fd);
+        master_log(400, client);
         free(client);
         return NULL;
     }
@@ -226,6 +230,7 @@ struct Client* init_request(char* request, int client_fd)
     {
         printf("Parse Error: Method\n");
         send_error(400, client_fd);
+        master_log(400, client);
         free(cpy_request);
         free(client);
         return NULL;
@@ -246,6 +251,7 @@ struct Client* init_request(char* request, int client_fd)
     {
         printf("Parse Error: Path\n");
         send_error(400, client_fd);
+        master_log(400, client);
         free(client);
         return NULL;
     }
@@ -256,6 +262,7 @@ struct Client* init_request(char* request, int client_fd)
     {
         printf("Parse Error: Version\n");
         send_error(400, client_fd);
+        master_log(400, client);
         free(client);
         return NULL;
     }
@@ -264,6 +271,7 @@ struct Client* init_request(char* request, int client_fd)
     {
         printf("Not correct version\n");
         send_error(505, client_fd);
+        master_log(505, client);
         free(client);
         return NULL;
     }
@@ -381,6 +389,7 @@ int process_request(struct Client* client)
     {
         printf("Bad Request\n");
         send_error(500, client->client_fd);
+        master_log(500, client);
         return -1;
     }
     
@@ -393,6 +402,7 @@ int process_request(struct Client* client)
     {
         printf("Not Implemented\n");
         send_error(501, client->client_fd);
+        master_log(501, client);
         return 0;
     }
 
@@ -400,6 +410,7 @@ int process_request(struct Client* client)
     {
         printf("Bad Request\n");
         send_error(400, client->client_fd);
+        master_log(400, client);
         return -1;
     }
 
@@ -423,6 +434,7 @@ int process_request(struct Client* client)
 
     char path[MAXLINE] = "/home/remote/server/webpages";
     strcat(path, requested_page);
+    client->full_path = strdup(path);
 
     printf("User wants: %s\n", path);
 
@@ -430,6 +442,8 @@ int process_request(struct Client* client)
     {
         printf("Asked for restricted page\n");
         send_error(403, client->client_fd);
+        master_log(403, client);
+        free(client->full_path);
         return -1;
     }
 
@@ -437,6 +451,8 @@ int process_request(struct Client* client)
     {
         printf("April fools joke\n");
         send_error(418, client->client_fd);
+        master_log(418, client);
+        free(client->full_path);
         return -1;
     }
 
@@ -445,12 +461,13 @@ int process_request(struct Client* client)
     {
         printf("Not opened\n");
         send_error(404, client->client_fd);
+        master_log(404, client);
+        free(client->full_path);
         return -1;
     }
 
     printf("Path: %s\n", path);
     printf("Requested-Page: %s\n", requested_page);
-    client->full_path = strdup(path);
 
     free(requested_page);
     return fd;
@@ -477,6 +494,7 @@ int send_response(struct Client* client)
             printf("Error sending response\n");
         }
         printf("Response:\n%s\n", headers);
+        master_log(200, client);
 
         free(date);
         return 0;
@@ -497,6 +515,7 @@ int send_response(struct Client* client)
             printf("Error sending response\n");
         }
         printf("Response:\n%s\n", headers);
+        master_log(200, client);
 
         free(date);
         return 0;
@@ -509,6 +528,7 @@ int send_response(struct Client* client)
     {
         printf("File_type not supported\n");
         send_error(406, client->client_fd);
+        master_log(406, client);
         free(date);
         free(week_date);
         return -1;
@@ -560,6 +580,8 @@ int send_response(struct Client* client)
         header_len += sprintf(headers + header_len, "\r\n");
         send(client->client_fd, headers, header_len, 0);
     }
+
+    master_log(200, client);
     
     close(client->fd);
     free(file_type);
@@ -622,12 +644,12 @@ int master_log(int code, struct Client* client)
         return -1;
     }
 
-    char* date = get_date(0);
+    char* date = get_time(0);
     char* response = malloc(MAXLINE);
 
-    sprintf("%s, %s:%d, %d, %s", date, client->client_ip, client->port, code, client->full_path);
+    sprintf(response, "%s, %s:%d, %d, %s\n", date, client->client_ip, client->client_port, code, client->full_path);
 
-    if(write(fd, response, sizeof(response)) < 0)
+    if(write(fd, response, strlen(response)) < 0)
     {
         printf("Write error in log\n");
         return -1;
@@ -635,6 +657,7 @@ int master_log(int code, struct Client* client)
 
     free(response);
     free(date);
+    close(fd);
 
     return 1;
 }
@@ -656,6 +679,7 @@ int send_error(int code, int client_fd)
     strcpy(path,"/home/remote/server/webpages/error_pages");
     char* response = malloc(MAX_RESPONSE);
     char* date = get_time(0);   
+
     switch(code)
     {
         case 200:
