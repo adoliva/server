@@ -8,6 +8,9 @@ int main(int argc, char** argv)
         exit(1);
     }
 
+    signal(SIGINT, signal_handler);
+    signal(SIGTERM, signal_handler);
+
     (void) argv;
 
     int sockfd;
@@ -34,8 +37,8 @@ int main(int argc, char** argv)
     }
 
     struct timeval tv;
-    tv.tv_sec = 5;
-    tv.tv_usec = 0;
+    tv.tv_sec = 0;
+    tv.tv_usec = 200;
     if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv))) 
     {
         printf("SO_RCVTIMEO failed");
@@ -87,10 +90,9 @@ int main(int argc, char** argv)
             }
         } 
 
-        int activity = select(reuse_sockfd + 1, &read_fds, NULL, NULL, NULL);
+        int activity = select(reuse_sockfd + 1, &read_fds, NULL, NULL, &tv);
         if (activity < 0 && errno != EINTR) 
         {
-            printf("select error");
             continue;
         }
 
@@ -100,8 +102,7 @@ int main(int argc, char** argv)
         {
             if ((client_socket = accept(sockfd, (struct sockaddr *)&client_addr, &addr_len)) < 0) 
             {
-                printf("accept failed");
-                exit(1);
+                continue;
             }
             
             printf("New connection from %s:%d\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
@@ -137,7 +138,10 @@ int main(int argc, char** argv)
                 }
 
                 if(recv_len <= 0)
+                {
+                    printf("Recieved nothing\n");
                     continue;
+                }
 
                 request[recv_len] = '\0';
                 printf("Recieved %d\n", recv_len);	
@@ -147,9 +151,13 @@ int main(int argc, char** argv)
                 struct Client* client = init_request(request, client_sockets[i]);
                 if(client == NULL)
                 {
-                    printf("NULL client\n");
+                    printf("Failed to initialized client\n");
+                    free(client);
+                    client_sockets[i] = 0;
+                    close(client_sockets[i]);
                     continue;
                 }
+                
                 client->client_fd = client_sockets[i];
                 client->client_ip = inet_ntoa(client_addr.sin_addr);
                 client->client_port = ntohs(client_addr.sin_port);
@@ -159,6 +167,8 @@ int main(int argc, char** argv)
                 {
                     printf("Could not process request\n");
                     free(client);
+                    client_sockets[i] = 0;
+                    close(client_sockets[i]);
                     continue;
                 }
 
@@ -173,6 +183,7 @@ int main(int argc, char** argv)
                         free(client->full_path);
                         free(client);
                         client_sockets[i] = 0;
+                        close(client_sockets[i]);
                         continue;
                     }
                 }
@@ -180,11 +191,14 @@ int main(int argc, char** argv)
 
                 if(!client->connection_status)
                 {
+                    printf("Closed\n");
                     close(client_sockets[i]);
                     client_sockets[i] = 0;
                 }
 
                 memset(request, 0, sizeof(request));
+
+                free(client->full_path);
                 free(client);
             }
         }
@@ -267,6 +281,7 @@ struct Client* init_request(char* request, int client_fd)
         return NULL;
     }
 
+    /*
     if(strncmp(client->version, "HTTP/1.1", 8) != 0)
     {
         printf("Not correct version\n");
@@ -275,8 +290,12 @@ struct Client* init_request(char* request, int client_fd)
         free(client);
         return NULL;
     }
+    */
 
-    client->connection_status = 1;
+    if(strncmp(client->version, "HTTP/1.0", 8) == 0)
+        client->connection_status = 0;
+    else
+        client->connection_status = 1;
 
     while((line = strtok_r(NULL, "\r\n", &tokptr)) != NULL)
     {
@@ -637,7 +656,7 @@ char* content_type(char* filepath)
 
 int master_log(int code, struct Client* client)
 {
-    int fd = open("/home/remote/server/debug.txt", O_CREAT | O_APPEND | O_WRONLY);
+    int fd = open("/home/remote/server/debug.txt", O_CREAT | O_APPEND | O_WRONLY, 0774);
     if(fd < 0)
     {
         printf("fd open error in log\n");

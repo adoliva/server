@@ -17,7 +17,7 @@
 #define PORT 80
 #define MAXLINE 4096
 #define MAX_RESPONSE 32300
-#define MAX_CLIENTS 10
+#define MAX_CLIENTS 20
 
 #define SERVER "Snap/0.1"
 
@@ -29,7 +29,13 @@ char* content_type(char*);
 int master_log(int, struct Client*);
 int send_error(int, int);
 
-int SIGNAL_FLAG = 0;
+
+volatile sig_atomic_t SIGNAL_FLAG = 0;
+void signal_handler(int signum)
+{
+    (void) signum;
+    SIGNAL_FLAG = 1;
+}
 
 struct Client
 {
