@@ -457,15 +457,6 @@ int process_request(struct Client* client)
 
     printf("User wants: %s\n", path);
 
-    if(strstr(path, "..") != NULL)
-    {
-        printf("Asked for restricted page (..)\n");
-        send_error(403, client->client_fd);
-        master_log(403, client);
-        free(client->full_path);
-        return -1;
-    }
-
     if(strcmp(path, "/home/remote/server/webpages/www") == 0)
     {
         printf("Asked for restricted page\n");
@@ -580,8 +571,7 @@ int send_response(struct Client* client)
         
         header_len += sprintf(headers + header_len, "Content-Length: %ld\r\n\r\n", file_size);
         
-        if (send(client->client_fd, headers, header_len, 0) < 0) 
-        {
+        if (send(client->client_fd, headers, header_len, 0) < 0) {
             perror("Send headers failed");
             close(client->fd);
             free(file_type);
@@ -592,20 +582,9 @@ int send_response(struct Client* client)
         printf("Sent: %d\n%s\n", header_len, headers);
 
         char file_buffer[MAX_RESPONSE];
-
-        while (1) 
+        int n;
+        while ((n = read(client->fd, file_buffer, sizeof(file_buffer))) > 0) 
         {
-            int n = read(client->fd, file_buffer, sizeof(file_buffer));
-            if(n < 0)
-            {
-                printf("Error in read");
-                return -1;
-            }
-            else if(n == 0)
-            {
-                printf("EOF\n");
-                break;
-            }
             if (send(client->client_fd, file_buffer, n, 0) < 0) 
             {
                 perror("Send file failed");
@@ -709,7 +688,7 @@ int master_log(int code, struct Client* client)
 */
 int send_error(int code, int client_fd)
 {
-    int fd;
+    int n, fd;
     char buffer[MAXLINE];
     off_t offset = 0;
 
@@ -744,24 +723,8 @@ int send_error(int code, int client_fd)
             lseek(fd, 0, SEEK_SET);
             
             sprintf(response, "HTTP/1.1 400 Bad Request\r\nDate: %s\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Length: %ld\r\nConnection: close\r\n\r\n", date, offset);
-            while(1)
-            {
-                int n = read(fd, buffer, sizeof(buffer));
-                if(n < 0)
-                {
-                    printf("Read Error in 400");
-                    return -1;
-                }
-                else if(n == 0)
-                {
-                    printf("EOF\n");
-                    break;
-                }
-                else
-                {
-                    strncat(response, buffer, n);
-                }
-            }
+            while((n = read(fd, buffer, sizeof(buffer))) > 0)
+                strncat(response, buffer, n);
             
             if(send(client_fd, response, strlen(response), 0) < 0)
                 printf("Send Failed\n");
@@ -775,24 +738,8 @@ int send_error(int code, int client_fd)
             lseek(fd, 0, SEEK_SET);
             
             sprintf(response, "HTTP/1.1 403 Forbidden\r\nDate: %s\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Length: %ld\r\nConnection: close\r\n\r\n", date, offset);
-            while(1)
-            {
-                int n = read(fd, buffer, sizeof(buffer));
-                if(n < 0)
-                {
-                    printf("Read Error in 403");
-                    return -1;
-                }
-                else if(n == 0)
-                {
-                    printf("EOF\n");
-                    break;
-                }
-                else
-                {
-                    strncat(response, buffer, n);
-                }
-            }
+            while((n = read(fd, buffer, sizeof(buffer))) > 0)
+                strncat(response, buffer, n);
             
             if(send(client_fd, response, strlen(response), 0) < 0)
                 printf("Send Failed\n");
@@ -805,23 +752,9 @@ int send_error(int code, int client_fd)
             lseek(fd, 0, SEEK_SET);
             
             sprintf(response, "HTTP/1.1 404 Not Found\r\nDate: %s\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Length: %ld\r\nConnection: close\r\n\r\n", date, offset);
-            while(1)
+            while((n = read(fd, buffer, sizeof(buffer))) > 0)
             {
-                int n = read(fd, buffer, sizeof(buffer));
-                if(n < 0)
-                {
-                    printf("Read Error in 404");
-                    return -1;
-                }
-                else if(n == 0)
-                {
-                    printf("EOF\n");
-                    break;
-                }
-                else
-                {
-                    strncat(response, buffer, n);
-                }
+                strncat(response, buffer, n);
             }
             
             if(send(client_fd, response, strlen(response), 0) < 0)
