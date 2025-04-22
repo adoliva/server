@@ -280,6 +280,11 @@ struct Client* init_request(char* request, int client_fd)
         free(client);
         return NULL;
     }
+    if(strncpy(client->version, client->version, 7) < 0)
+    {
+        printf("Error\n");
+        return -1;
+    }
 
     /*
     if(strncmp(client->version, "HTTP/1.1", 8) != 0)
@@ -511,7 +516,7 @@ int send_response(struct Client* client)
 
     if(strncmp(client->method, "OPTIONS", 7) == 0)
     {
-        header_len += sprintf(headers + header_len, "HTTP/1.1 204 No Content\r\n");
+        header_len += sprintf(headers + header_len, "%s 204 No Content\r\n", client->version);
         header_len += sprintf(headers + header_len, "Allow: GET, HEAD, OPTIONS, TRACE\r\n");
         header_len += sprintf(headers + header_len, "Date: %s\r\n", date);
         header_len += sprintf(headers + header_len, "Server: %s\r\n", SERVER);
@@ -530,7 +535,7 @@ int send_response(struct Client* client)
 
     if(strncmp(client->method, "TRACE", 5) == 0)
     {
-        header_len += sprintf(headers + header_len, "HTTP/1.1 200 OK\r\n");
+        header_len += sprintf(headers + header_len, "%s 200 OK\r\n", client->version);
         header_len += sprintf(headers + header_len, "Content-Length: %d\r\n", strlen(client->request));
         header_len += sprintf(headers + header_len, "Date: %s\r\n", date);
         header_len += sprintf(headers + header_len, "Server: %s\r\n", SERVER);
@@ -562,7 +567,7 @@ int send_response(struct Client* client)
         return -1;
     }
     
-    header_len += sprintf(headers + header_len, "HTTP/1.1 200 OK\r\n");
+    header_len += sprintf(headers + header_len, "%s 200 OK\r\n", client->version);
     header_len += sprintf(headers + header_len, "Accept-Ranges: bytes\r\n");
     header_len += sprintf(headers + header_len, "Content-Type: %s\r\n", file_type);
     header_len += sprintf(headers + header_len, "Date: %s\r\n", date);
