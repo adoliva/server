@@ -191,7 +191,7 @@ int main(int argc, char** argv)
                 {
                     if(send_response(client) < 0)
                     {
-                        send_error(406, client->client_fd);
+                        send_code(406, client->client_fd);
                         master_log(406, client);
                         printf("Does not accept filetype(s) html, svg, jpeg\n");
                         free(client->full_path);
@@ -201,7 +201,6 @@ int main(int argc, char** argv)
                         continue;
                     }
                 }
-
 
                 if(!client->connection_status)
                 {
@@ -231,7 +230,7 @@ struct Client* init_request(char* request, int client_fd, struct Node* tree_head
     if(!client)
     {
         printf("Unable to allocate space for client.\n");
-        send_error(500, client_fd);
+        send_code(500, client_fd);
         return NULL;
     }
 
@@ -245,7 +244,7 @@ struct Client* init_request(char* request, int client_fd, struct Node* tree_head
     if(line == NULL)
     {
         printf("Empty Request\n");
-        send_error(400, client_fd);
+        send_code(400, client_fd);
         master_log(400, client);
         free(client);
         return NULL;
@@ -257,7 +256,7 @@ struct Client* init_request(char* request, int client_fd, struct Node* tree_head
     if(client->method == NULL)
     {
         printf("Parse Error: Method\n");
-        send_error(400, client_fd);
+        send_code(400, client_fd);
         master_log(400, client);
         free(cpy_request);
         free(client);
@@ -278,7 +277,7 @@ struct Client* init_request(char* request, int client_fd, struct Node* tree_head
     if(client->path == NULL)
     {
         printf("Parse Error: Path\n");
-        send_error(400, client_fd);
+        send_code(400, client_fd);
         master_log(400, client);
         free(client);
         return NULL;
@@ -289,7 +288,16 @@ struct Client* init_request(char* request, int client_fd, struct Node* tree_head
     if(client->version == NULL)
     {
         printf("Parse Error: Version\n");
-        send_error(400, client_fd);
+        send_code(400, client_fd);
+        master_log(400, client);
+        free(client);
+        return NULL;
+    }
+
+    if(strlen(client->version) != 8)
+    {
+        printf("Error in version\n");
+        send_code(400, client_fd);
         master_log(400, client);
         free(client);
         return NULL;
@@ -349,7 +357,7 @@ struct Client* init_request(char* request, int client_fd, struct Node* tree_head
                 header_len += sprintf(headers + header_len, "Server: %s\r\n", SERVER);
                 header_len += sprintf(headers + header_len, "Connection: keep-alive\r\n\r\n");
         
-                //master_log(304, NULL);
+                master_log(304, client);
                 if(send(client_fd, headers, header_len, 0) < 0)
                 {
                     printf("Error sending response\n");
@@ -450,7 +458,7 @@ int process_request(struct Client* client)
     if(!client->method)
     {
         printf("Bad Request\n");
-        send_error(500, client->client_fd);
+        send_code(500, client->client_fd);
         master_log(500, client);
         return -1;
     }
@@ -463,7 +471,7 @@ int process_request(struct Client* client)
     if(strncmp(client->method, "GET", 3) != 0 && strncmp(client->method, "HEAD", 4) != 0)
     {
         printf("Not Implemented\n");
-        send_error(501, client->client_fd);
+        send_code(501, client->client_fd);
         master_log(501, client);
         return 0;
     }
@@ -471,7 +479,7 @@ int process_request(struct Client* client)
     if(!client->path)
     {
         printf("Bad Request\n");
-        send_error(400, client->client_fd);
+        send_code(400, client->client_fd);
         master_log(400, client);
         return -1;
     }
@@ -503,7 +511,7 @@ int process_request(struct Client* client)
     if(strstr(path, "..") != NULL)
     {
         printf("Asked for restricted page (..)\n");
-        send_error(403, client->client_fd);
+        send_code(403, client->client_fd);
         master_log(403, client);
         free(client->full_path);
         return -1;
@@ -512,7 +520,7 @@ int process_request(struct Client* client)
     if(strcmp(path, "/home/remote/server/webpages/www") == 0)
     {
         printf("Asked for restricted page\n");
-        send_error(403, client->client_fd);
+        send_code(403, client->client_fd);
         master_log(403, client);
         free(client->full_path);
         return -1;
@@ -521,7 +529,7 @@ int process_request(struct Client* client)
     if(strcmp(path, "/home/remote/server/webpages/teapot") == 0)
     {
         printf("April fools joke\n");
-        send_error(418, client->client_fd);
+        send_code(418, client->client_fd);
         master_log(418, client);
         free(client->full_path);
         return -1;
@@ -531,7 +539,7 @@ int process_request(struct Client* client)
     if(fd < 0)
     {
         printf("Not opened\n");
-        send_error(404, client->client_fd);
+        send_code(404, client->client_fd);
         master_log(404, client);
         free(client->full_path);
         return -1;
@@ -598,7 +606,7 @@ int send_response(struct Client* client)
     if(!file_type) 
     {
         printf("File_type not supported\n");
-        send_error(406, client->client_fd);
+        send_code(406, client->client_fd);
         master_log(406, client);
         free(date);
         free(week_date);
@@ -751,7 +759,7 @@ int master_log(int code, struct Client* client)
     0  -
     -1 -
 */
-int send_error(int code, int client_fd)
+int send_code(int code, int client_fd)
 {
     int fd;
     char buffer[MAXLINE];
@@ -776,7 +784,7 @@ int send_error(int code, int client_fd)
             printf("Redirected to a different place\n");
             break;
         case 304:
-            printf("Not modified - use cached result\n");
+            
             break;
         case 308:
             printf("Resource Permenatly Changed\n");

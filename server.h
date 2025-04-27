@@ -64,6 +64,6 @@ int send_response(struct Client* client);
 char* get_time(int offset);
 char* content_type(char* filepath);
 int master_log(int code, struct Client* client);
-int send_error(int code, int client_fd);
+int send_code(int code, int client_fd);
 
 #endif 
