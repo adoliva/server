@@ -201,6 +201,28 @@ int main(int argc, char** argv)
                         continue;
                     }
                 }
+                else if(strncmp(client->method, "POST", 4) == 0 || strncmp(client->method, "PUT", 3) == 0 || strncmp(client->method, "DELETE", 6) == 0 || strncmp(client->method, "CONNECT", 7) == 0 || strncmp(client->method, "PATCH", 5) == 0)
+                {
+                    send_code(501, client->client_fd);
+                    master_log(501, client);
+                    printf("Methods not Implemented\n");
+                    free(client->full_path);
+                    free(client);
+                    client_sockets[i] = 0;
+                    close(client_sockets[i]);
+                    continue;
+                }
+                else
+                {
+                    send_code(501, client->client_fd);
+                    master_log(501, client);
+                    printf("Methods not Implemented\n");
+                    free(client->full_path);
+                    free(client);
+                    client_sockets[i] = 0;
+                    close(client_sockets[i]);
+                    continue;
+                }
 
                 if(!client->connection_status)
                 {
@@ -294,7 +316,7 @@ struct Client* init_request(char* request, int client_fd, struct Node* tree_head
         return NULL;
     }
 
-    if(strlen(client->version) != 8)
+    if(strlen(client->version) < 5 && strlen(client->version) > 8)
     {
         printf("Error in version\n");
         send_code(400, client_fd);
@@ -306,8 +328,16 @@ struct Client* init_request(char* request, int client_fd, struct Node* tree_head
     //keep-alive is implied with HTTP/1.1 but not HTTP/1.0
     if(strncmp(client->version, "HTTP/1.0", 8) == 0)
         client->connection_status = 0;
-    else
+    else if(strncmp(client->version, "HTTP/1.1", 8) == 0)
         client->connection_status = 1;
+    else
+    {
+        printf("Version Error\n");
+        send_code(505, client_fd);
+        master_log(505, client);
+        free(client);
+        return NULL;
+    }
 
     while((line = strtok_r(NULL, "\r\n", &tokptr)) != NULL)
     {
@@ -775,10 +805,10 @@ int send_code(int code, int client_fd)
     switch(code)
     {
         case 200:
-            printf("Understood the request\n");
+            printf("OK\n");
             break;
         case 201:
-            printf("Created the media\n");
+            printf("Created\n");
             break;
         case 301:
             printf("Redirected to a different place\n");
@@ -832,7 +862,7 @@ int send_code(int code, int client_fd)
                 int n = read(fd, buffer, sizeof(buffer));
                 if(n < 0)
                 {
-                    printf("Read Error in 403");
+                    printf("Read Error in 403\n");
                     return -1;
                 }
                 else if(n == 0)
@@ -892,14 +922,19 @@ int send_code(int code, int client_fd)
             sprintf(response, "HTTP/1.1 418 I'm a teapot\r\nContent-Type: text/plain\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", strlen(teapot), teapot);
 
             if(send(client_fd, response, strlen(response), 0) < 0)
-                printf("Send Failed\n");
-
+                printf("418 Send Failed\n");
+                
             break;
         case 500: 
             printf("Internal Server Error\n");
             break;
         case 501: 
             printf("Not Implemented\n");
+            sprintf(response, "HTTP/1.1 501 Not Implemented\r\nConnection: close\r\n\r\n");
+
+            if(send(client_fd, response, strlen(response), 0) < 0)
+                printf("501 Send Failed\n");
+
             break;
         case 505: 
             printf("Version Not Supported\n");
