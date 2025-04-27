@@ -1,5 +1,12 @@
 #include "server.h"
 
+volatile sig_atomic_t SIGNAL_FLAG = 0;
+void signal_handler(int signum) 
+{
+    (void) signum;
+    SIGNAL_FLAG = 1;
+}
+
 int main(int argc, char** argv)
 {
     if(argc != 1)
@@ -13,13 +20,17 @@ int main(int argc, char** argv)
 
     (void) argv;
 
+    struct Node* tree_head = init_tree();
+    struct Node* curr = tree_head;
+    printTree(curr, 0);
+
     int sockfd;
     struct sockaddr_in server_addr;
     socklen_t server_len = sizeof(server_addr);
 
     if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
     {
-        printf("Unable to create socket\n");
+        printf("Unable to create socket.\n");
         exit(1);
     }
 
@@ -45,7 +56,6 @@ int main(int argc, char** argv)
         close(sockfd);
         exit(1);
     }
-
 
     if(bind(sockfd, (struct sockaddr*)&server_addr, server_len) < 0)
     {
@@ -125,7 +135,7 @@ int main(int argc, char** argv)
             {
                 memset(request, 0, MAXLINE);
                 
-                int recv_len;
+                ssize_t recv_len;
                 if ((recv_len = recv(client_sockets[i], request, sizeof(request), 0)) == 0) 
                 {
                     getpeername(client_sockets[i], (struct sockaddr*)&client_addr, &addr_len);
@@ -142,13 +152,18 @@ int main(int argc, char** argv)
                     printf("Recieved nothing\n");
                     continue;
                 }
+                else if(recv_len > (ssize_t)sizeof(request) - 1)
+                {
+                    printf("Length Exceeded\n");
+                    continue;
+                }
 
                 request[recv_len] = '\0';
                 printf("Recieved %d\n", recv_len);	
                 printf("Received from client %d: %s", i, request);
 
 
-                struct Client* client = init_request(request, client_sockets[i]);
+                struct Client* client = init_request(request, client_sockets[i], tree_head);
                 if(client == NULL)
                 {
                     printf("Failed to initialized client\n");
@@ -171,7 +186,6 @@ int main(int argc, char** argv)
                     close(client_sockets[i]);
                     continue;
                 }
-
 
                 if(strncmp(client->method, "GET", 3) == 0 || strncmp(client->method, "HEAD", 4) == 0 || strncmp(client->method, "OPTIONS", 7) == 0 || strncmp(client->method, "TRACE", 5) == 0)
                 {
@@ -209,14 +223,14 @@ int main(int argc, char** argv)
     return 0;
 }
 
-struct Client* init_request(char* request, int client_fd)
+struct Client* init_request(char* request, int client_fd, struct Node* tree_head)
 {
     char* cpy_request = strdup(request);
 
     struct Client* client = malloc(sizeof(struct Client));
     if(!client)
     {
-        printf("Unable to allocate space for client\n");
+        printf("Unable to allocate space for client.\n");
         send_error(500, client_fd);
         return NULL;
     }
@@ -280,23 +294,8 @@ struct Client* init_request(char* request, int client_fd)
         free(client);
         return NULL;
     }
-    if(strncpy(client->version, client->version, 7) < 0)
-    {
-        printf("Error\n");
-        return -1;
-    }
 
-    /*
-    if(strncmp(client->version, "HTTP/1.1", 8) != 0)
-    {
-        printf("Not correct version\n");
-        send_error(505, client_fd);
-        master_log(505, client);
-        free(client);
-        return NULL;
-    }
-    */
-
+    //keep-alive is implied with HTTP/1.1 but not HTTP/1.0
     if(strncmp(client->version, "HTTP/1.0", 8) == 0)
         client->connection_status = 0;
     else
@@ -322,6 +321,45 @@ struct Client* init_request(char* request, int client_fd)
         {
             line += 12;
             client->user_agent = line;
+        }
+        else if((strncmp(line, "If-None-Match: ", 15)) == 0)
+        {
+            line += 16;
+
+            line[strlen(line) - 1] = '\0';
+            printf("left: %s\n", line);
+
+            char* tag = line;
+
+            if(lookupNode(tree_head, tag))
+            {
+                printf("Found Tag.\n");   
+
+                int header_len = 0;
+                char headers[MAXLINE];
+                memset(headers, 0, sizeof(headers));
+
+                char* date = get_time(0);
+                char* week_date = get_time(7 * 24 * 60 * 60);
+
+                header_len += sprintf(headers + header_len, "%s 304 Not Modified\r\n", client->version);
+                header_len += sprintf(headers + header_len, "Date: %s\r\n", date);
+                header_len += sprintf(headers + header_len, "Expires: %s\r\n", week_date);
+                header_len += sprintf(headers + header_len, "ETag: \"%s\"\r\n", tag);
+                header_len += sprintf(headers + header_len, "Server: %s\r\n", SERVER);
+                header_len += sprintf(headers + header_len, "Connection: keep-alive\r\n\r\n");
+        
+                //master_log(304, NULL);
+                if(send(client_fd, headers, header_len, 0) < 0)
+                {
+                    printf("Error sending response\n");
+                }
+                free(date);
+                free(week_date);
+
+                printf("Sent: \n%s\n", headers);
+            }
+            return NULL;
         }
         else if((strncmp(line, "DNT: ", 5)) == 0)
         {
@@ -570,6 +608,7 @@ int send_response(struct Client* client)
     header_len += sprintf(headers + header_len, "%s 200 OK\r\n", client->version);
     header_len += sprintf(headers + header_len, "Accept-Ranges: bytes\r\n");
     header_len += sprintf(headers + header_len, "Content-Type: %s\r\n", file_type);
+    header_len += sprintf(headers + header_len, "ETag: \"%d\"\r\n", hashString(client->full_path));
     header_len += sprintf(headers + header_len, "Date: %s\r\n", date);
     header_len += sprintf(headers + header_len, "Expires: %s\r\n", week_date);
     header_len += sprintf(headers + header_len, "Last-Modified: Sat, 4 Mar 2025 10:18:33 GMT\r\n");
