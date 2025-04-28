@@ -17,12 +17,18 @@
 
 #include "node.h"
 
-#define PORT 80
+#define HTTP_PORT 80
 #define MAXLINE 4096
 #define MAX_RESPONSE 32300
 #define MAX_CLIENTS 50
 
-#define SERVER "Snap/0.1"
+//Milestones
+/*
+Snap/0.1 - Simple Server 
+Snap/0.2 - Added Caching (304) with BST Implementation
+*/
+
+#define SERVER "Snap/0.2"
 #define LAST_MODIFIED "Mon, 28 Apr 2025 19:18:33 GMT" //Needs fixing to per file
 
 extern volatile sig_atomic_t SIGNAL_FLAG;
