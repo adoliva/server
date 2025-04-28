@@ -204,10 +204,12 @@ int main(int argc, char** argv)
                         master_log(406, client);
                         printf("Does not accept filetype(s) html, svg, jpeg\n");
                         free(client->full_path);
+                        free(client->tag);
                         free(client);
                         client_sockets[i] = 0;
                         close(client_sockets[i]);
                         continue;
+
                     }
                 }
                 else if(strncmp(client->method, "POST", 4) == 0 || strncmp(client->method, "PUT", 3) == 0 || strncmp(client->method, "DELETE", 6) == 0 || strncmp(client->method, "CONNECT", 7) == 0 || strncmp(client->method, "PATCH", 5) == 0)
@@ -216,6 +218,7 @@ int main(int argc, char** argv)
                     master_log(501, client);
                     printf("Methods not Implemented.\n");
                     free(client->full_path);
+                    free(client->tag);
                     free(client);
                     client_sockets[i] = 0;
                     close(client_sockets[i]);
@@ -226,6 +229,7 @@ int main(int argc, char** argv)
                     send_code(501, client->client_fd);
                     master_log(501, client);
                     printf("Methods not Implemented\n");
+                    free(client->tag);
                     free(client->full_path);
                     free(client);
                     client_sockets[i] = 0;
@@ -242,12 +246,14 @@ int main(int argc, char** argv)
 
                 memset(request, 0, sizeof(request));
 
+                free(client->tag);
                 free(client->full_path);
                 free(client);
             }
         }
     }
 
+    free_tree(tree_head);
     close(sockfd);
 
     return 0;
@@ -446,6 +452,7 @@ struct Client* init_request(char* request, int client_fd)
     printf("%s %s %s\n", client->method, client->path, client->version);
     printf("Host: %s\n", client->host);
     printf("Keep Alive: %d\n", client->connection_status);
+    printf("Tag: %s\n", client->tag);
     printf("DNT: %d\n", client->DNT);
     printf("GPC: %d\n", client->GPC);
     printf("Upgrade-Insecure_Requests: %d\n", client->upgrade_tls);
@@ -528,6 +535,7 @@ int process_request(struct Client* client, struct Node* tree_head)
         send_code(403, client->client_fd);
         master_log(403, client);
         free(client->full_path);
+        free(requested_page);
         return -1;
     }
 
@@ -538,11 +546,11 @@ int process_request(struct Client* client, struct Node* tree_head)
         send_code(403, client->client_fd);
         master_log(403, client);
         free(client->full_path);
+        free(requested_page);
         return -1;
     }
 
     //check hash
-
     if(client->tag != 0 && lookupNode(tree_head, hashPath(client->full_path)) > 0)
     {
         char headers[MAX_RESPONSE];
@@ -569,6 +577,7 @@ int process_request(struct Client* client, struct Node* tree_head)
 
         free(date);
         free(week_date);
+        free(requested_page);
         return 1;
     }
 
@@ -579,6 +588,7 @@ int process_request(struct Client* client, struct Node* tree_head)
         send_code(418, client->client_fd);
         master_log(418, client);
         free(client->full_path);
+        free(requested_page);
         return -1;
     }
 
@@ -589,6 +599,7 @@ int process_request(struct Client* client, struct Node* tree_head)
         send_code(404, client->client_fd);
         master_log(404, client);
         free(client->full_path);
+        free(requested_page);
         return -1;
     }
 
@@ -964,6 +975,7 @@ int send_code(int code, int client_fd)
 
     free(date);
     free(response);
+    free(path);
 
     return 1;
 }

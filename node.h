@@ -17,5 +17,6 @@ int hashPath(char* filename);
 void insert_node(struct Node*, struct Node*);
 int lookupNode(struct Node*, int);
 void printTree(struct Node*, int);
+void free_tree(struct Node*);
 
 #endif 

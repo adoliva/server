@@ -197,3 +197,14 @@ int lookupNode(struct Node* head, int tag)
 
     return 0;
 }
+
+void free_tree(struct Node* node)
+{
+    if (node != NULL)
+    {
+        free_tree(node->right);
+        free(node->path);
+        free_tree(node->left);
+        free(node);
+    }
+}
