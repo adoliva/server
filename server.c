@@ -49,8 +49,8 @@ int main(int argc, char** argv)
     }
 
     struct timeval tv;
-    tv.tv_sec = 0;
-    tv.tv_usec = 200;
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;
     if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv))) 
     {
         printf("SO_RCVTIMEO failed");
@@ -126,6 +126,10 @@ int main(int argc, char** argv)
                     printf("Adding to list of sockets as %d\n", i);
                     break;
                 }
+                else
+                {
+                    printf("Connection in %d\n", i);
+                }
             }
         }
 
@@ -134,6 +138,7 @@ int main(int argc, char** argv)
         {
             if (client_sockets[i] > 0 && FD_ISSET(client_sockets[i], &read_fds))
             {
+                printf("Going into request for index %d\n", i);
                 memset(request, 0, MAXLINE);
                 
                 ssize_t recv_len;
@@ -148,14 +153,20 @@ int main(int argc, char** argv)
                     continue;
                 }
 
+                printf("Recieved %d", recv_len);
+
                 if(recv_len <= 0)
                 {
                     printf("Recieved nothing\n");
+                    close(client_sockets[i]);
+                    client_sockets[i] = 0;
                     continue;
                 }
                 else if(recv_len > (ssize_t)sizeof(request) - 1)
                 {
                     printf("Length Exceeded\n");
+                    close(client_sockets[i]);
+                    client_sockets[i] = 0;
                     continue;
                 }
 
@@ -169,8 +180,8 @@ int main(int argc, char** argv)
                 {
                     printf("Failed to initialized client\n");
                     free(client);
-                    client_sockets[i] = 0;
                     close(client_sockets[i]);
+                    client_sockets[i] = 0;
                     continue;
                 }
                 
@@ -183,8 +194,8 @@ int main(int argc, char** argv)
                 {
                     printf("Could not process request\n");
                     free(client);
-                    client_sockets[i] = 0;
                     close(client_sockets[i]);
+                    client_sockets[i] = 0;
                     continue;
                 }
                 else if(client->fd == 1) //Cached Response
@@ -192,23 +203,22 @@ int main(int argc, char** argv)
                     printf("Cached Response\n");
                     free(client->full_path);
                     free(client);
-                    client_sockets[i] = 0;
                     close(client_sockets[i]);
+                    client_sockets[i] = 0;
                     continue;
                 }
 
                 if(strncmp(client->method, "GET", 3) == 0 || strncmp(client->method, "HEAD", 4) == 0 || strncmp(client->method, "OPTIONS", 7) == 0 || strncmp(client->method, "TRACE", 5) == 0)
                 {
-                    if(send_response(client) < 0)
+                    if(send_response(tree_head, client) < 0)
                     {
                         send_code(406, client->client_fd);
                         master_log(406, client);
                         printf("Does not accept filetype(s) html, svg, jpeg\n");
                         free(client->full_path);
-                        free(client->tag);
                         free(client);
-                        client_sockets[i] = 0;
                         close(client_sockets[i]);
+                        client_sockets[i] = 0;
                         continue;
 
                     }
@@ -219,10 +229,9 @@ int main(int argc, char** argv)
                     master_log(501, client);
                     printf("Methods not Implemented.\n");
                     free(client->full_path);
-                    free(client->tag);
                     free(client);
-                    client_sockets[i] = 0;
                     close(client_sockets[i]);
+                    client_sockets[i] = 0;
                     continue;
                 }
                 else
@@ -230,11 +239,10 @@ int main(int argc, char** argv)
                     send_code(501, client->client_fd);
                     master_log(501, client);
                     printf("Methods not Implemented\n");
-                    free(client->tag);
                     free(client->full_path);
                     free(client);
-                    client_sockets[i] = 0;
                     close(client_sockets[i]);
+                    client_sockets[i] = 0;
                     continue;
                 }
 
@@ -245,9 +253,6 @@ int main(int argc, char** argv)
                     client_sockets[i] = 0;
                 }
 
-                memset(request, 0, sizeof(request));
-
-                free(client->tag);
                 free(client->full_path);
                 free(client);
             }
@@ -383,11 +388,7 @@ struct Client* init_request(char* request, int client_fd)
         {
             line += 16;
             line[strlen(line)-1] = '\0';
-
-            client->tag = malloc(strlen(line));
-            strcpy(client->tag, line);
-
-            printf("Tag: %s\n", client->tag);
+            client->tag = strtol(line, NULL, 10);
         }
         else if((strncmp(line, "DNT: ", 5)) == 0)
         {
@@ -453,7 +454,7 @@ struct Client* init_request(char* request, int client_fd)
     printf("%s %s %s\n", client->method, client->path, client->version);
     printf("Host: %s\n", client->host);
     printf("Keep Alive: %d\n", client->connection_status);
-    printf("Tag: %s\n", client->tag);
+    printf("Tag: %u\n", client->tag);
     printf("DNT: %d\n", client->DNT);
     printf("GPC: %d\n", client->GPC);
     printf("Upgrade-Insecure_Requests: %d\n", client->upgrade_tls);
@@ -552,7 +553,10 @@ int process_request(struct Client* client, struct Node* tree_head)
     }
 
     //check hash
-    if(client->tag != 0 && lookupNode(tree_head, hashPath(client->full_path)) > 0)
+    unsigned int file_hash = lookupNode(tree_head, hashPath(client->full_path));
+    printf("File_hash: %u : client->tag: %u \n", file_hash, client->tag);
+
+    if(file_hash == client->tag)
     {
         char headers[MAX_RESPONSE];
         int header_len = 0;
@@ -563,11 +567,12 @@ int process_request(struct Client* client, struct Node* tree_head)
 
         header_len += sprintf(headers + header_len, "%s 304 Not Modified\r\n", client->version);
         header_len += sprintf(headers + header_len, "Accept-Ranges: bytes\r\n");
-        header_len += sprintf(headers + header_len, "ETag: \"%s\"\r\n", client->tag);
+        header_len += sprintf(headers + header_len, "ETag: \"%u\"\r\n", client->tag);
         header_len += sprintf(headers + header_len, "Date: %s\r\n", date);
         header_len += sprintf(headers + header_len, "Expires: %s\r\n", week_date);
         header_len += sprintf(headers + header_len, "Last-Modified: %s\r\n", LAST_MODIFIED);
-        header_len += sprintf(headers + header_len, "Server: %s\r\n\r\n", SERVER);
+        header_len += sprintf(headers + header_len, "Server: %s\r\n", SERVER);
+        header_len += sprintf(headers + header_len, "Connection: close\r\n\r\n");
 
         if(send(client->client_fd, headers, header_len, 0) < 0)
         {
@@ -611,7 +616,13 @@ int process_request(struct Client* client, struct Node* tree_head)
     return fd;
 }
 
-int send_response(struct Client* client) 
+/*
+-1 - Error
+0 - Different Method
+1 - Cached
+>2 - fd
+*/
+int send_response(struct Node* head, struct Client* client) 
 {
     char headers[MAX_RESPONSE];
     int header_len = 0;
@@ -675,7 +686,7 @@ int send_response(struct Client* client)
     header_len += sprintf(headers + header_len, "%s 200 OK\r\n", client->version);
     header_len += sprintf(headers + header_len, "Accept-Ranges: bytes\r\n");
     header_len += sprintf(headers + header_len, "Content-Type: %s\r\n", file_type);
-    header_len += sprintf(headers + header_len, "ETag: \"%d\"\r\n", hashPath(client->full_path));
+    header_len += sprintf(headers + header_len, "ETag: \"%u\"\r\n", lookupNode(head, hashPath(client->full_path)));
     header_len += sprintf(headers + header_len, "Date: %s\r\n", date);
     header_len += sprintf(headers + header_len, "Expires: %s\r\n", week_date);
     header_len += sprintf(headers + header_len, "Last-Modified: %s\r\n", LAST_MODIFIED);
@@ -719,7 +730,7 @@ int send_response(struct Client* client)
             }
             if (send(client->client_fd, file_buffer, n, 0) < 0) 
             {
-                perror("Send file failed");
+                printf("Send file failed");
                 break;
             }   
             printf("Sent: %d\n%s\n", n, file_buffer);
@@ -741,7 +752,7 @@ int send_response(struct Client* client)
     return 0;
 }
 
-//<day>, <day #> <month> <year> <time: ##:##:##> GMT
+//<3 abv day>, <day #> <month> <year> <time: ##:##:##> GMT
 char* get_time(int offset)
 {
     time_t now = time(NULL);

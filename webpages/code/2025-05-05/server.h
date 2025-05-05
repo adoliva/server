@@ -24,7 +24,7 @@
 
 //Milestones
 /*
-Snap/0.1 - Simple Server 
+Snap/0.1 - Simple Server
 Snap/0.2 - Added Caching (304) 
 */
 
@@ -47,7 +47,7 @@ struct Client {
     char* version;
     
     char* host;
-    char* tag;
+    unsigned int tag;
     int connection_status;
     
     int DNT;
@@ -68,7 +68,7 @@ struct Client {
 
 struct Client* init_request(char*, int);
 int process_request(struct Client*, struct Node*);
-int send_response(struct Client*);
+int send_response(struct Node*, struct Client*);
 char* get_time(int);
 char* content_type(char*);
 int master_log(int, struct Client*);
