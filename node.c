@@ -43,6 +43,7 @@ struct Node* init_tree()
     }
     printf("DONE\n");
 
+    
     if(unlink("results.txt") < 0)
     {
 	    printf("file cannot be deleted\n");

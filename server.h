@@ -33,6 +33,7 @@ Snap/0.2 - Added Caching (304)
 
 extern volatile sig_atomic_t SIGNAL_FLAG;
 void signal_handler(int signum);
+void updateTree(int signum);
 
 struct Client {
     char* client_ip;

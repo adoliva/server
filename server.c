@@ -1,10 +1,18 @@
 #include "server.h"
 
+//Make head a global that was i can free it easy and dont have to pass it in anywhere.
+
 volatile sig_atomic_t SIGNAL_FLAG = 0;
 void signal_handler(int signum) 
 {
     (void) signum;
     SIGNAL_FLAG = 1;
+}
+
+void updateTree(int signum)
+{
+    (void) signum;
+    printf("Signal Recieved at pid:%d\n", getpid());
 }
 
 int main(int argc, char** argv)
@@ -17,6 +25,7 @@ int main(int argc, char** argv)
 
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
+    signal(SIGUSR1, updateTree);
 
     (void) argv;
 
@@ -153,8 +162,6 @@ int main(int argc, char** argv)
                     continue;
                 }
 
-                printf("Recieved %d", recv_len);
-
                 if(recv_len <= 0)
                 {
                     printf("Recieved nothing\n");
@@ -172,7 +179,7 @@ int main(int argc, char** argv)
 
                 request[recv_len] = '\0';
                 printf("Recieved %d\n", recv_len);	
-                printf("Received from client %d: %s", i, request);
+                printf("Received from client %d: \n%s", i, request);
 
 
                 struct Client* client = init_request(request, client_sockets[i]);
@@ -553,38 +560,41 @@ int process_request(struct Client* client, struct Node* tree_head)
     }
 
     //check hash
-    unsigned int file_hash = lookupNode(tree_head, hashPath(client->full_path));
-    printf("File_hash: %u : client->tag: %u \n", file_hash, client->tag);
-
-    if(file_hash == client->tag)
+    if(client->tag != 0)
     {
-        char headers[MAX_RESPONSE];
-        int header_len = 0;
-        memset(headers, 0, sizeof(headers));
+        unsigned int file_hash = lookupNode(tree_head, hashPath(client->full_path));
+        printf("File_hash: %u : client->tag: %u \n", file_hash, client->tag);
 
-        char* date = get_time(0);
-        char* week_date = get_time(7 * 24 * 60 * 60);
-
-        header_len += sprintf(headers + header_len, "%s 304 Not Modified\r\n", client->version);
-        header_len += sprintf(headers + header_len, "Accept-Ranges: bytes\r\n");
-        header_len += sprintf(headers + header_len, "ETag: \"%u\"\r\n", client->tag);
-        header_len += sprintf(headers + header_len, "Date: %s\r\n", date);
-        header_len += sprintf(headers + header_len, "Expires: %s\r\n", week_date);
-        header_len += sprintf(headers + header_len, "Last-Modified: %s\r\n", LAST_MODIFIED);
-        header_len += sprintf(headers + header_len, "Server: %s\r\n", SERVER);
-        header_len += sprintf(headers + header_len, "Connection: close\r\n\r\n");
-
-        if(send(client->client_fd, headers, header_len, 0) < 0)
+        if(file_hash == client->tag)
         {
-            printf("Error sending response.\n");
-        }
-        printf("Response:\n%s\n", headers);
-        master_log(304, client);
+            char headers[MAX_RESPONSE];
+            int header_len = 0;
+            memset(headers, 0, sizeof(headers));
 
-        free(date);
-        free(week_date);
-        free(requested_page);
-        return 1;
+            char* date = get_time(0);
+            char* week_date = get_time(7 * 24 * 60 * 60);
+
+            header_len += sprintf(headers + header_len, "%s 304 Not Modified\r\n", client->version);
+            header_len += sprintf(headers + header_len, "Accept-Ranges: bytes\r\n");
+            header_len += sprintf(headers + header_len, "ETag: \"%u\"\r\n", client->tag);
+            header_len += sprintf(headers + header_len, "Date: %s\r\n", date);
+            header_len += sprintf(headers + header_len, "Expires: %s\r\n", week_date);
+            header_len += sprintf(headers + header_len, "Last-Modified: %s\r\n", LAST_MODIFIED);
+            header_len += sprintf(headers + header_len, "Server: %s\r\n", SERVER);
+            header_len += sprintf(headers + header_len, "Connection: close\r\n\r\n");
+
+            if(send(client->client_fd, headers, header_len, 0) < 0)
+            {
+                printf("Error sending response.\n");
+            }
+            printf("Response:\n%s\n", headers);
+            master_log(304, client);
+
+            free(date);
+            free(week_date);
+            free(requested_page);
+            return 1;
+        }
     }
 
     //Check April Fools
@@ -702,7 +712,8 @@ int send_response(struct Node* head, struct Client* client)
         
         header_len += sprintf(headers + header_len, "Content-Length: %ld\r\n\r\n", file_size);
         
-        if (send(client->client_fd, headers, header_len, 0) < 0) 
+        int n = send(client->client_fd, headers, header_len, 0);
+        if(n < 0) 
         {
             perror("Send headers failed");
             close(client->fd);
