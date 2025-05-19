@@ -15,7 +15,7 @@ struct Node* init_tree()
     if(fd < 0)
     {
         printf("find or reading failed\n");
-        return NULL;
+        return NULL; 
     }
 
     char buffer[READSIZE];
@@ -86,6 +86,8 @@ struct Node* add_node(struct Node* head, char* filename)
     }
     new_node->file_hash = file_hash;
 
+    printf("In main: %d\n", new_node->file_hash);
+
     if(!head)
     {
         printf("Head failed\n");
@@ -139,6 +141,7 @@ int hashFile(char* filename)
         }
     }
 
+    printf("hash in filehash %ld\n", hash);
     return hash;
 }
 

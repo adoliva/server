@@ -15,8 +15,55 @@ void updateTree(int signum)
     printf("Signal Recieved at pid:%d\n", getpid());
 }
 
+
+void cleanup_openssl() {
+    EVP_cleanup();
+    ERR_free_strings();
+}
+
+
+void init_openssl() {
+    SSL_library_init();
+    SSL_load_error_strings();
+    OpenSSL_add_all_algorithms();
+}
+
+
+SSL_CTX* create_ssl_context() {
+    const SSL_METHOD *method;
+    SSL_CTX *ctx;
+
+    method = SSLv23_server_method();
+    ctx = SSL_CTX_new(method);
+    if (!ctx) {
+        perror("Unable to create SSL context");
+        ERR_print_errors_fp(stderr);
+        exit(EXIT_FAILURE);
+    }
+
+    return ctx;
+}
+
+void configure_ssl_context(SSL_CTX *ctx) {
+
+    if (SSL_CTX_use_certificate_file(ctx, "/home/remote/server/keys/cert.pem", SSL_FILETYPE_PEM) <= 0) {
+        ERR_print_errors_fp(stderr);
+        exit(EXIT_FAILURE);
+    }
+
+    if (SSL_CTX_use_PrivateKey_file(ctx, "/home/remote/server/keys/key.pem", SSL_FILETYPE_PEM) <= 0) {
+        ERR_print_errors_fp(stderr);
+        exit(EXIT_FAILURE);
+    }
+
+    if (!SSL_CTX_check_private_key(ctx)) {
+        fprintf(stderr, "Private key does not match the public certificate\n");
+        exit(EXIT_FAILURE);
+    }  
+}
+
 int main(int argc, char** argv)
-{
+{ 
     if(argc != 1)
     {
         printf("Usage <sudo ./server>\n");
@@ -24,103 +71,186 @@ int main(int argc, char** argv)
     }
 
     signal(SIGINT, signal_handler);
-    signal(SIGTERM, signal_handler);
-    signal(SIGUSR1, updateTree);
+    signal(SIGTERM, signal_handler); 
+    signal(SIGUSR1, updateTree);  
 
     (void) argv;
+
+    printf("Got through\n");
 
     struct Node* tree_head = init_tree();
     struct Node* curr = tree_head;
     printTree(curr, 0);
 
-    int sockfd;
-    struct sockaddr_in server_addr;
-    socklen_t server_len = sizeof(server_addr);
+    init_openssl();
+    SSL_CTX *ssl_ctx = create_ssl_context();
+    configure_ssl_context(ssl_ctx);
+
+    printf("Got throught tree\n");
+
+    int http_sock, https_sock;
+    struct sockaddr_in http_server_addr, https_server_addr;
+    socklen_t http_server_len = sizeof(http_server_addr);
+    socklen_t https_server_len = sizeof(https_server_addr); 
 
     //http socket
-    if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+    if((http_sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
     {
-        printf("Unable to create socket.\n");
+        printf("Unable to create socket 80.\n");
         exit(1);
     }
 
-    bzero(&server_addr, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(HTTP_PORT);
+    if((https_sock = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+    {
+        printf("Unable to create socket 443.\n");
+        exit(1);
+    }
+
+    bzero(&http_server_addr, sizeof(http_server_addr));
+    http_server_addr.sin_family = AF_INET;
+    http_server_addr.sin_addr.s_addr = INADDR_ANY;
+    http_server_addr.sin_port = htons(HTTP_PORT);
+
+    bzero(&https_server_addr, sizeof(https_server_addr));
+    https_server_addr.sin_family = AF_INET;
+    https_server_addr.sin_addr.s_addr = INADDR_ANY;
+    https_server_addr.sin_port = htons(HTTPS_PORT);
 
     int opt = 1;
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) 
+    if (setsockopt(http_sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) 
     {
         printf("SO_REUSEADDR failed");
-        close(sockfd);
+        close(http_sock);
+        close(https_sock);
+        exit(1);
+    }
+
+    if (setsockopt(https_sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) 
+    {
+        printf("SO_REUSEADDR failed");
+        close(http_sock);
+        close(https_sock);
         exit(1);
     }
 
     struct timeval tv;
     tv.tv_sec = 1;
     tv.tv_usec = 0;
-    if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv))) 
+    if (setsockopt(http_sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv))) 
     {
         printf("SO_RCVTIMEO failed");
-        close(sockfd);
+        close(http_sock);
+        close(https_sock);
         exit(1);
     }
 
-    if(bind(sockfd, (struct sockaddr*)&server_addr, server_len) < 0)
+    if (setsockopt(https_sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv))) 
+    {
+        printf("SO_RCVTIMEO failed");
+        close(http_sock);
+        close(https_sock);
+        exit(1);
+    }
+
+    if(bind(http_sock, (struct sockaddr*)&http_server_addr, http_server_len) < 0)
     {
         printf("Bind failed to port %d\n", HTTP_PORT);
         
-        close(sockfd);
+        close(http_sock);
+        close(https_sock);
+        exit(1);
+    }
+
+    if(bind(https_sock, (struct sockaddr*)&https_server_addr, https_server_len) < 0)
+    {
+        printf("Bind failed to port %d\n", HTTPS_PORT);
+        
+        close(http_sock);
+        close(https_sock);
         exit(1);
     }
 
     printf("Successfully opened on port %d\n", HTTP_PORT);
+    printf("Successfully opened on port %d\n", HTTPS_PORT);
 
-    if(listen(sockfd, 10) < 0)
+    if(listen(http_sock, BACKLOG) < 0)
     {
-        printf("Listen failed\n");
+        printf("Listen failed 80\n");
 
-        close(sockfd);
+        close(http_sock);
+        close(https_sock);
         exit(1);
     }
 
-    fd_set read_fds;
-    int client_sockets[MAX_CLIENTS] = {0};
+    if(listen(https_sock, BACKLOG) < 0)
+    {
+        printf("Listen failed 443\n");
 
+        fprintf(stderr, "listen failed (errno %d): %s\n", errno, strerror(errno));
+
+        close(http_sock);
+        close(https_sock);
+        exit(1);
+    }
+
+    fd_set http_read_fds;
+    int http_client_sockets[MAX_CLIENTS] = {0};
+
+    fd_set https_read_fds;
+    int https_client_sockets[MAX_CLIENTS] = {0};
+    SSL *https_client_ssl[MAX_CLIENTS] = {NULL};
 
     struct sockaddr_in client_addr;
     socklen_t addr_len = sizeof(client_addr);  
 
     while(SIGNAL_FLAG == 0)
     {
-        FD_ZERO(&read_fds);
-        FD_SET(sockfd, &read_fds);
+        FD_ZERO(&http_read_fds);
+        FD_SET(http_sock, &http_read_fds);
 
-        int reuse_sockfd = sockfd;
+        FD_ZERO(&https_read_fds);
+        FD_SET(https_sock, &https_read_fds);
+
+        int reuse_http_sock = http_sock;
+        int reuse_https_sock = https_sock;
 
         for (int i = 0; i < MAX_CLIENTS; i++) 
         {
-            if (client_sockets[i] > 0) {
-                FD_SET(client_sockets[i], &read_fds);
+            if (http_client_sockets[i] > 0) {
+                FD_SET(http_client_sockets[i], &http_read_fds);
+            }
+
+            if (https_client_sockets[i] > 0) {
+                FD_SET(https_client_sockets[i], &https_read_fds);
             }
             
-            if (client_sockets[i] > reuse_sockfd) {
-                reuse_sockfd = client_sockets[i];
+            if (http_client_sockets[i] > reuse_http_sock) {
+                reuse_http_sock = http_client_sockets[i];
+            }
+
+            if (https_client_sockets[i] > reuse_https_sock) {
+                reuse_https_sock = https_client_sockets[i];
             }
         } 
 
-        int activity = select(reuse_sockfd + 1, &read_fds, NULL, NULL, &tv);
-        if (activity < 0 && errno != EINTR) 
+        int http_activity = select(reuse_http_sock + 1, &http_read_fds, NULL, NULL, &tv);
+        if (http_activity < 0 && errno != EINTR) 
+        {
+            continue;
+        }
+
+        int https_activity = select(reuse_https_sock + 1, &https_read_fds, NULL, NULL, &tv);
+        if (https_activity < 0 && errno != EINTR) 
         {
             continue;
         }
 
         int client_socket;
 
-        if (FD_ISSET(sockfd, &read_fds)) 
+        //http socket handling
+        if (FD_ISSET(http_sock, &http_read_fds)) 
         {
-            if ((client_socket = accept(sockfd, (struct sockaddr *)&client_addr, &addr_len)) < 0) 
+            if ((client_socket = accept(http_sock, (struct sockaddr *)&client_addr, &addr_len)) < 0) 
             {
                 continue;
             }
@@ -129,9 +259,9 @@ int main(int argc, char** argv)
             
             for (int i = 0; i < MAX_CLIENTS; i++) 
             {
-                if (client_sockets[i] == 0)
+                if (http_client_sockets[i] == 0)
                 {
-                    client_sockets[i] = client_socket;
+                    http_client_sockets[i] = client_socket;
                     printf("Adding to list of sockets as %d\n", i);
                     break;
                 }
@@ -145,35 +275,35 @@ int main(int argc, char** argv)
         char request[MAXLINE];
         for (int i = 0; i < MAX_CLIENTS; i++) 
         {
-            if (client_sockets[i] > 0 && FD_ISSET(client_sockets[i], &read_fds))
+            if (http_client_sockets[i] > 0 && FD_ISSET(http_client_sockets[i], &http_read_fds))
             {
                 printf("Going into request for index %d\n", i);
                 memset(request, 0, MAXLINE);
                 
                 ssize_t recv_len;
-                if ((recv_len = recv(client_sockets[i], request, sizeof(request), 0)) == 0) 
+                if ((recv_len = recv(http_client_sockets[i], request, sizeof(request), 0)) == 0) 
                 {
-                    getpeername(client_sockets[i], (struct sockaddr*)&client_addr, &addr_len);
+                    getpeername(http_client_sockets[i], (struct sockaddr*)&client_addr, &addr_len);
                     printf("Client disconnected: %s:%d\n", 
                            inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
                     
-                    close(client_sockets[i]);
-                    client_sockets[i] = 0;
+                    close(http_client_sockets[i]);
+                    http_client_sockets[i] = 0;
                     continue;
                 }
 
                 if(recv_len <= 0)
                 {
                     printf("Recieved nothing\n");
-                    close(client_sockets[i]);
-                    client_sockets[i] = 0;
+                    close(http_client_sockets[i]);
+                    http_client_sockets[i] = 0;
                     continue;
                 }
                 else if(recv_len > (ssize_t)sizeof(request) - 1)
                 {
                     printf("Length Exceeded\n");
-                    close(client_sockets[i]);
-                    client_sockets[i] = 0;
+                    close(http_client_sockets[i]);
+                    http_client_sockets[i] = 0;
                     continue;
                 }
 
@@ -182,17 +312,17 @@ int main(int argc, char** argv)
                 printf("Received from client %d: \n%s", i, request);
 
 
-                struct Client* client = init_request(request, client_sockets[i]);
+                struct Client* client = init_request(request, http_client_sockets[i]);
                 if(client == NULL)
                 {
                     printf("Failed to initialized client\n");
                     free(client);
-                    close(client_sockets[i]);
-                    client_sockets[i] = 0;
+                    close(http_client_sockets[i]);
+                    http_client_sockets[i] = 0;
                     continue;
                 }
                 
-                client->client_fd = client_sockets[i];
+                client->client_fd = http_client_sockets[i];
                 client->client_ip = inet_ntoa(client_addr.sin_addr);
                 client->client_port = ntohs(client_addr.sin_port);
 
@@ -201,8 +331,8 @@ int main(int argc, char** argv)
                 {
                     printf("Could not process request\n");
                     free(client);
-                    close(client_sockets[i]);
-                    client_sockets[i] = 0;
+                    close(http_client_sockets[i]);
+                    http_client_sockets[i] = 0;
                     continue;
                 }
                 else if(client->fd == 1) //Cached Response
@@ -210,8 +340,8 @@ int main(int argc, char** argv)
                     printf("Cached Response\n");
                     free(client->full_path);
                     free(client);
-                    close(client_sockets[i]);
-                    client_sockets[i] = 0;
+                    close(http_client_sockets[i]);
+                    http_client_sockets[i] = 0;
                     continue;
                 }
 
@@ -224,8 +354,8 @@ int main(int argc, char** argv)
                         printf("Does not accept filetype(s) html, svg, jpeg\n");
                         free(client->full_path);
                         free(client);
-                        close(client_sockets[i]);
-                        client_sockets[i] = 0;
+                        close(http_client_sockets[i]);
+                        http_client_sockets[i] = 0;
                         continue;
 
                     }
@@ -237,8 +367,8 @@ int main(int argc, char** argv)
                     printf("Methods not Implemented.\n");
                     free(client->full_path);
                     free(client);
-                    close(client_sockets[i]);
-                    client_sockets[i] = 0;
+                    close(http_client_sockets[i]);
+                    http_client_sockets[i] = 0;
                     continue;
                 }
                 else
@@ -248,16 +378,246 @@ int main(int argc, char** argv)
                     printf("Methods not Implemented\n");
                     free(client->full_path);
                     free(client);
-                    close(client_sockets[i]);
-                    client_sockets[i] = 0;
+                    close(http_client_sockets[i]);
+                    http_client_sockets[i] = 0;
                     continue;
                 }
 
                 if(!client->connection_status)
                 {
                     printf("Closed\n");
-                    close(client_sockets[i]);
-                    client_sockets[i] = 0;
+                    close(http_client_sockets[i]);
+                    http_client_sockets[i] = 0;
+                }
+
+                free(client->full_path);
+                free(client);
+            }
+        }
+
+      client_socket = 0;
+        if (FD_ISSET(https_sock, &https_read_fds)) 
+        {
+            if ((client_socket = accept(https_sock, (struct sockaddr *)&client_addr, &addr_len)) < 0) 
+            {
+                continue;
+            }
+            
+            printf("New https connection from %s:%d\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+            
+            int slot = -1;
+            for (int i = 0; i < MAX_CLIENTS; i++) 
+            {
+                if (https_client_sockets[i] == 0)
+                {
+                    slot = i;
+                    break;
+                }
+            }
+            
+            if (slot == -1) {
+                close(client_socket);
+                continue;
+            }
+            
+            SSL *ssl = SSL_new(ssl_ctx);
+            if (!ssl) {
+                fprintf(stderr, "Failed to create SSL structure\n");
+                close(client_socket);
+                continue;
+            }
+            
+            if (SSL_set_fd(ssl, client_socket) != 1) {
+                fprintf(stderr, "Failed to attach SSL to socket\n");
+                SSL_free(ssl);
+                close(client_socket);
+                continue;
+            }
+            
+            int res = SSL_accept(ssl);
+            if (res <= 0) {
+                fprintf(stderr, "SSL handshake failed\n");
+                int ssl_error = SSL_get_error(ssl, res);
+                    fprintf(stderr, "SSL accept failed with error: %d - ", ssl_error);
+    switch (ssl_error) {
+        case SSL_ERROR_NONE:
+            fprintf(stderr, "SSL_ERROR_NONE\n");
+            break;
+        case SSL_ERROR_ZERO_RETURN:
+            fprintf(stderr, "SSL_ERROR_ZERO_RETURN\n");
+            break;
+        case SSL_ERROR_WANT_READ:
+            fprintf(stderr, "SSL_ERROR_WANT_READ\n");
+            break;
+        case SSL_ERROR_WANT_WRITE:
+            fprintf(stderr, "SSL_ERROR_WANT_WRITE\n");
+            break;
+        case SSL_ERROR_WANT_CONNECT:
+            fprintf(stderr, "SSL_ERROR_WANT_CONNECT\n");
+            break;
+        case SSL_ERROR_WANT_ACCEPT:
+            fprintf(stderr, "SSL_ERROR_WANT_ACCEPT\n");
+            break;
+        case SSL_ERROR_SYSCALL:
+            fprintf(stderr, "SSL_ERROR_SYSCALL: %s\n", strerror(errno));
+            break;
+        case SSL_ERROR_SSL:
+            fprintf(stderr, "SSL_ERROR_SSL (protocol error)\n");
+            break;
+        default:
+            fprintf(stderr, "Unknown SSL error\n");
+    }
+    ERR_print_errors_fp(stderr);
+                ERR_print_errors_fp(stderr);
+                SSL_free(ssl);
+                close(client_socket);
+                continue;
+            }
+            
+            https_client_sockets[slot] = client_socket;
+            https_client_ssl[slot] = ssl;
+            printf("Adding to list of https sockets as %d\n", slot);
+        }
+
+        memset(request, 0, sizeof(request));
+        for (int i = 0; i < MAX_CLIENTS; i++) 
+        {
+            if (https_client_sockets[i] > 0 && FD_ISSET(https_client_sockets[i], &https_read_fds))
+            {
+                printf("Going into https request for index %d\n", i);
+                memset(request, 0, MAXLINE);
+
+                SSL *ssl = https_client_ssl[i];
+                ssize_t recv_len = SSL_read(ssl, request, sizeof(request) - 1);
+                if (recv_len <= 0) 
+                {
+                    int err = SSL_get_error(ssl, recv_len);
+                    if (err == SSL_ERROR_ZERO_RETURN) {
+                        getpeername(https_client_sockets[i], (struct sockaddr*)&client_addr, &addr_len);
+                        printf("HTTPS Client disconnected: %s:%d\n", 
+                               inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+                    } else {
+                        fprintf(stderr, "SSL read error: %d\n", err);
+                        ERR_print_errors_fp(stderr);
+                    }
+                    
+                    SSL_free(ssl);
+                    close(https_client_sockets[i]);
+                    https_client_sockets[i] = 0;
+                    https_client_ssl[i] = NULL;
+                    continue;
+                }
+
+                if(recv_len <= 0)
+                {
+                    printf("Recieved nothing\n");
+                    close(https_client_sockets[i]);
+                    https_client_sockets[i] = 0;
+                    continue;
+                }
+                else if(recv_len > (ssize_t)sizeof(request) - 1)
+                {
+                    printf("Length Exceeded\n");
+                    close(https_client_sockets[i]);
+                    https_client_sockets[i] = 0;
+                    continue;
+                }
+
+                request[recv_len] = '\0';
+                printf("https Recieved %d\n", recv_len);	
+                printf("https Received from client %d: \n%s", i, request);
+
+                struct Client* client = init_request(request, https_client_sockets[i]);
+                if(client == NULL)
+                {
+                    printf("Failed to initialized client\n");
+                    free(client);
+                    SSL_free(ssl);
+                    close(https_client_sockets[i]);
+                    https_client_sockets[i] = 0;
+                    https_client_ssl[i] = NULL;
+                    continue;
+                }
+                
+                client->client_fd = https_client_sockets[i];
+                client->client_ip = inet_ntoa(client_addr.sin_addr);
+                client->client_port = ntohs(client_addr.sin_port);
+                client->is_ssl = 1;
+                client->ssl = ssl;
+
+                client->fd = process_request(client, tree_head);
+                if(client->fd < 0)
+                {
+                    printf("Could not process request\n");
+                    free(client);
+                    SSL_free(ssl);
+                    close(https_client_sockets[i]);
+                    https_client_sockets[i] = 0;
+                    https_client_ssl[i] = NULL;
+                    continue;
+                }
+                else if(client->fd == 1) //Cached Response
+                {
+                    printf("Cached Response\n");
+                    free(client->full_path);
+                    free(client);
+                    SSL_free(ssl);
+                    close(https_client_sockets[i]);
+                    https_client_sockets[i] = 0;
+                    https_client_ssl[i] = NULL;
+                    continue;
+                }
+
+                if(strncmp(client->method, "GET", 3) == 0 || strncmp(client->method, "HEAD", 4) == 0 || strncmp(client->method, "OPTIONS", 7) == 0 || strncmp(client->method, "TRACE", 5) == 0)
+                {
+                    if(send_response(tree_head, client) < 0)
+                    {
+                        send_code(406, client->client_fd);
+                        master_log(406, client);
+                        printf("Does not accept filetype(s) html, svg, jpeg\n");
+                        free(client->full_path);
+                        free(client);
+                        SSL_free(ssl);
+                        close(https_client_sockets[i]);
+                        https_client_sockets[i] = 0;
+                        https_client_ssl[i] = NULL;
+                        continue;
+                    }
+                }
+                else if(strncmp(client->method, "POST", 4) == 0 || strncmp(client->method, "PUT", 3) == 0 || strncmp(client->method, "DELETE", 6) == 0 || strncmp(client->method, "CONNECT", 7) == 0 || strncmp(client->method, "PATCH", 5) == 0)
+                {
+                    send_code(501, client->client_fd);
+                    master_log(501, client);
+                    printf("Methods not Implemented.\n");
+                    free(client->full_path);
+                    free(client);
+                    SSL_free(ssl);
+                    close(https_client_sockets[i]);
+                    https_client_sockets[i] = 0;
+                    https_client_ssl[i] = NULL;
+                    continue;
+                }
+                else
+                {
+                    send_code(501, client->client_fd);
+                    master_log(501, client);
+                    printf("Methods not Implemented\n");
+                    free(client->full_path);
+                    free(client);
+                    SSL_free(ssl);
+                    close(https_client_sockets[i]);
+                    https_client_sockets[i] = 0;
+                    https_client_ssl[i] = NULL;
+                    continue;
+                }
+
+                if(!client->connection_status)
+                {
+                    printf("https Closed\n");
+                    SSL_free(ssl);
+                    close(https_client_sockets[i]);
+                    https_client_sockets[i] = 0;
+                    https_client_ssl[i] = NULL;
                 }
 
                 free(client->full_path);
@@ -267,7 +627,8 @@ int main(int argc, char** argv)
     }
 
     free_tree(tree_head);
-    close(sockfd);
+    close(http_sock);
+    close(https_sock);
 
     return 0;
 }
@@ -471,6 +832,7 @@ struct Client* init_request(char* request, int client_fd)
     printf("Encoding: %s\n", client->encoding);
     printf("Langauge: %s\n", client->language);
     printf("Priority: %s\n", client->priority);
+    printf("Is SSL: %d\n", client->is_ssl);
     printf("\n\n");
     
     return client;
@@ -583,10 +945,21 @@ int process_request(struct Client* client, struct Node* tree_head)
             header_len += sprintf(headers + header_len, "Server: %s\r\n", SERVER);
             header_len += sprintf(headers + header_len, "Connection: close\r\n\r\n");
 
-            if(send(client->client_fd, headers, header_len, 0) < 0)
+            if(client->is_ssl)
             {
-                printf("Error sending response.\n");
+                if(SSL_write(client->ssl, headers, header_len) < 0)
+                {
+                    printf("Error sending https response.\n");
+                }
             }
+            else
+            {
+                if(send(client->client_fd, headers, header_len, 0) < 0)
+                {
+                    printf("Error sending http response.\n");
+                }
+            }
+
             printf("Response:\n%s\n", headers);
             master_log(304, client);
 
@@ -648,10 +1021,21 @@ int send_response(struct Node* head, struct Client* client)
         header_len += sprintf(headers + header_len, "Server: %s\r\n", SERVER);
         header_len += sprintf(headers + header_len, "Connection: keep-alive\r\n\r\n");
 
-        if(send(client->client_fd, headers, header_len, 0) < 0)
+        if(client->is_ssl)
         {
-            printf("Error sending response\n");
+            if(SSL_write(client->ssl, headers, header_len) < 0)
+            {
+                printf("Error sending https response.\n");
+            }
         }
+        else
+        {
+            if(send(client->client_fd, headers, header_len, 0) < 0)
+            {
+                printf("Error sending http response.\n");
+            }
+        }
+
         printf("Response:\n%s\n", headers);
         master_log(200, client);
 
@@ -669,10 +1053,21 @@ int send_response(struct Node* head, struct Client* client)
 
         header_len += sprintf(headers + header_len, client->request);
 
-        if(send(client->client_fd, headers, header_len, 0) < 0)
+        if(client->is_ssl)
         {
-            printf("Error sending response\n");
+            if(SSL_write(client->ssl, headers, header_len) < 0)
+            {
+                printf("Error sending https response.\n");
+            }
         }
+        else
+        {
+            if(send(client->client_fd, headers, header_len, 0) < 0)
+            {
+                printf("Error sending http response.\n");
+            }
+        }
+
         printf("Response:\n%s\n", headers);
         master_log(200, client);
 
@@ -712,7 +1107,14 @@ int send_response(struct Node* head, struct Client* client)
         
         header_len += sprintf(headers + header_len, "Content-Length: %ld\r\n\r\n", file_size);
         
-        int n = send(client->client_fd, headers, header_len, 0);
+        int n;
+        if(client->is_ssl)
+            n = SSL_write(client->ssl, headers, header_len);
+        else
+            n = send(client->client_fd, headers, header_len, 0);
+
+            
+
         if(n < 0) 
         {
             perror("Send headers failed");
@@ -739,11 +1141,22 @@ int send_response(struct Node* head, struct Client* client)
                 printf("EOF\n");
                 break;
             }
-            if (send(client->client_fd, file_buffer, n, 0) < 0) 
+            else if(client->is_ssl)
             {
-                printf("Send file failed");
-                break;
-            }   
+                if (SSL_write(client->ssl, file_buffer, n) < 0) 
+                {
+                    printf("Send file failed");
+                    break;
+                } 
+            }
+            else
+            {
+                if (send(client->client_fd, file_buffer, n, 0) < 0) 
+                {
+                    printf("Send file failed");
+                    break;
+                }  
+            } 
             printf("Sent: %d\n%s\n", n, file_buffer);
             memset(file_buffer, 0, sizeof(file_buffer));
         }
@@ -751,7 +1164,11 @@ int send_response(struct Node* head, struct Client* client)
     else 
     {
         header_len += sprintf(headers + header_len, "\r\n");
-        send(client->client_fd, headers, header_len, 0);
+
+        if(client->is_ssl)
+            SSL_write(client->ssl, headers, header_len);
+        else
+            send(client->client_fd, headers, header_len, 0);
     }
 
     master_log(200, client);

@@ -15,9 +15,14 @@
 #include <signal.h>
 #include <errno.h>
 
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+
 #include "node.h"
 
 #define HTTP_PORT 80
+#define HTTPS_PORT 443
+#define BACKLOG 20
 #define MAXLINE 4096
 #define MAX_RESPONSE 32300
 #define MAX_CLIENTS 50
@@ -65,6 +70,9 @@ struct Client {
     
     char* priority;
     char* request;
+
+    int is_ssl;
+    SSL* ssl;
 };
 
 struct Client* init_request(char*, int);

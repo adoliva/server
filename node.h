@@ -22,4 +22,4 @@ unsigned int lookupNode(struct Node*, unsigned int);
 void printTree(struct Node*, int);
 void free_tree(struct Node*);
 
-#endif 
+#endif  
