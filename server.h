@@ -14,6 +14,7 @@
 #include <arpa/inet.h>
 #include <signal.h>
 #include <errno.h>
+#include <stdbool.h>
 
 #include <openssl/ssl.h>
 #include <openssl/err.h>
@@ -75,7 +76,7 @@ struct Client {
     SSL* ssl;
 };
 
-struct Client* init_request(char*, int);
+struct Client* init_request(char*, int, bool);
 int process_request(struct Client*, struct Node*);
 int send_response(struct Node*, struct Client*);
 char* get_time(int);

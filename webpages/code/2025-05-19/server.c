@@ -76,8 +76,6 @@ int main(int argc, char** argv)
 
     (void) argv;
 
-    printf("Got through\n");
-
     struct Node* tree_head = init_tree();
     struct Node* curr = tree_head;
     printTree(curr, 0);
@@ -86,7 +84,6 @@ int main(int argc, char** argv)
     SSL_CTX *ssl_ctx = create_ssl_context();
     configure_ssl_context(ssl_ctx);
 
-    printf("Got throught tree\n");
 
     int http_sock, https_sock;
     struct sockaddr_in http_server_addr, https_server_addr;
@@ -395,7 +392,7 @@ int main(int argc, char** argv)
             }
         }
 
-      client_socket = 0;
+        client_socket = 0;
         if (FD_ISSET(https_sock, &https_read_fds)) 
         {
             if ((client_socket = accept(https_sock, (struct sockaddr *)&client_addr, &addr_len)) < 0) 
@@ -437,37 +434,6 @@ int main(int argc, char** argv)
             int res = SSL_accept(ssl);
             if (res <= 0) {
                 fprintf(stderr, "SSL handshake failed\n");
-                int ssl_error = SSL_get_error(ssl, res);
-                    fprintf(stderr, "SSL accept failed with error: %d - ", ssl_error);
-    switch (ssl_error) {
-        case SSL_ERROR_NONE:
-            fprintf(stderr, "SSL_ERROR_NONE\n");
-            break;
-        case SSL_ERROR_ZERO_RETURN:
-            fprintf(stderr, "SSL_ERROR_ZERO_RETURN\n");
-            break;
-        case SSL_ERROR_WANT_READ:
-            fprintf(stderr, "SSL_ERROR_WANT_READ\n");
-            break;
-        case SSL_ERROR_WANT_WRITE:
-            fprintf(stderr, "SSL_ERROR_WANT_WRITE\n");
-            break;
-        case SSL_ERROR_WANT_CONNECT:
-            fprintf(stderr, "SSL_ERROR_WANT_CONNECT\n");
-            break;
-        case SSL_ERROR_WANT_ACCEPT:
-            fprintf(stderr, "SSL_ERROR_WANT_ACCEPT\n");
-            break;
-        case SSL_ERROR_SYSCALL:
-            fprintf(stderr, "SSL_ERROR_SYSCALL: %s\n", strerror(errno));
-            break;
-        case SSL_ERROR_SSL:
-            fprintf(stderr, "SSL_ERROR_SSL (protocol error)\n");
-            break;
-        default:
-            fprintf(stderr, "Unknown SSL error\n");
-    }
-    ERR_print_errors_fp(stderr);
                 ERR_print_errors_fp(stderr);
                 SSL_free(ssl);
                 close(client_socket);
@@ -479,6 +445,7 @@ int main(int argc, char** argv)
             printf("Adding to list of https sockets as %d\n", slot);
         }
 
+        //starting https requests
         memset(request, 0, sizeof(request));
         for (int i = 0; i < MAX_CLIENTS; i++) 
         {

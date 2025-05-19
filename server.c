@@ -1,7 +1,6 @@
 #include "server.h"
 
 //Make head a global that was i can free it easy and dont have to pass it in anywhere.
-
 volatile sig_atomic_t SIGNAL_FLAG = 0;
 void signal_handler(int signum) 
 {
@@ -309,7 +308,7 @@ int main(int argc, char** argv)
                 printf("Received from client %d: \n%s", i, request);
 
 
-                struct Client* client = init_request(request, http_client_sockets[i]);
+                struct Client* client = init_request(request, http_client_sockets[i], false);
                 if(client == NULL)
                 {
                     printf("Failed to initialized client\n");
@@ -392,7 +391,7 @@ int main(int argc, char** argv)
             }
         }
 
-      client_socket = 0;
+        client_socket = 0;
         if (FD_ISSET(https_sock, &https_read_fds)) 
         {
             if ((client_socket = accept(https_sock, (struct sockaddr *)&client_addr, &addr_len)) < 0) 
@@ -434,37 +433,6 @@ int main(int argc, char** argv)
             int res = SSL_accept(ssl);
             if (res <= 0) {
                 fprintf(stderr, "SSL handshake failed\n");
-                int ssl_error = SSL_get_error(ssl, res);
-                    fprintf(stderr, "SSL accept failed with error: %d - ", ssl_error);
-    switch (ssl_error) {
-        case SSL_ERROR_NONE:
-            fprintf(stderr, "SSL_ERROR_NONE\n");
-            break;
-        case SSL_ERROR_ZERO_RETURN:
-            fprintf(stderr, "SSL_ERROR_ZERO_RETURN\n");
-            break;
-        case SSL_ERROR_WANT_READ:
-            fprintf(stderr, "SSL_ERROR_WANT_READ\n");
-            break;
-        case SSL_ERROR_WANT_WRITE:
-            fprintf(stderr, "SSL_ERROR_WANT_WRITE\n");
-            break;
-        case SSL_ERROR_WANT_CONNECT:
-            fprintf(stderr, "SSL_ERROR_WANT_CONNECT\n");
-            break;
-        case SSL_ERROR_WANT_ACCEPT:
-            fprintf(stderr, "SSL_ERROR_WANT_ACCEPT\n");
-            break;
-        case SSL_ERROR_SYSCALL:
-            fprintf(stderr, "SSL_ERROR_SYSCALL: %s\n", strerror(errno));
-            break;
-        case SSL_ERROR_SSL:
-            fprintf(stderr, "SSL_ERROR_SSL (protocol error)\n");
-            break;
-        default:
-            fprintf(stderr, "Unknown SSL error\n");
-    }
-    ERR_print_errors_fp(stderr);
                 ERR_print_errors_fp(stderr);
                 SSL_free(ssl);
                 close(client_socket);
@@ -476,6 +444,7 @@ int main(int argc, char** argv)
             printf("Adding to list of https sockets as %d\n", slot);
         }
 
+        //starting https requests
         memset(request, 0, sizeof(request));
         for (int i = 0; i < MAX_CLIENTS; i++) 
         {
@@ -524,7 +493,7 @@ int main(int argc, char** argv)
                 printf("https Recieved %d\n", recv_len);	
                 printf("https Received from client %d: \n%s", i, request);
 
-                struct Client* client = init_request(request, https_client_sockets[i]);
+                struct Client* client = init_request(request, https_client_sockets[i], true);
                 if(client == NULL)
                 {
                     printf("Failed to initialized client\n");
@@ -539,7 +508,6 @@ int main(int argc, char** argv)
                 client->client_fd = https_client_sockets[i];
                 client->client_ip = inet_ntoa(client_addr.sin_addr);
                 client->client_port = ntohs(client_addr.sin_port);
-                client->is_ssl = 1;
                 client->ssl = ssl;
 
                 client->fd = process_request(client, tree_head);
@@ -630,7 +598,7 @@ int main(int argc, char** argv)
     return 0;
 }
 
-struct Client* init_request(char* request, int client_fd)
+struct Client* init_request(char* request, int client_fd, bool is_ssl)
 {
     char* cpy_request = strdup(request);
 
@@ -727,6 +695,11 @@ struct Client* init_request(char* request, int client_fd)
 
     //set to 0 - IF NO TAG THIS VALUE WILL BE USED
     client->tag = 0;
+
+    if(is_ssl)
+    {
+        client->is_ssl = 1;
+    }
 
     while((line = strtok_r(NULL, "\r\n", &tokptr)) != NULL)
     {
