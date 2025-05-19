@@ -76,6 +76,8 @@ int main(int argc, char** argv)
 
     (void) argv;
 
+    printf("Got through\n");
+
     struct Node* tree_head = init_tree();
     struct Node* curr = tree_head;
     printTree(curr, 0);
@@ -84,6 +86,7 @@ int main(int argc, char** argv)
     SSL_CTX *ssl_ctx = create_ssl_context();
     configure_ssl_context(ssl_ctx);
 
+    printf("Got throught tree\n");
 
     int http_sock, https_sock;
     struct sockaddr_in http_server_addr, https_server_addr;
