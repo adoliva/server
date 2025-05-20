@@ -51,8 +51,8 @@ int main(int argc, char** argv)
     struct timeval tv;
     tv.tv_sec = 1;
     tv.tv_usec = 0;
-    if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv))) 
-    {
+    if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)))
+    {  
         printf("SO_RCVTIMEO failed");
         close(sockfd);
         exit(1);
@@ -60,7 +60,7 @@ int main(int argc, char** argv)
 
     if(bind(sockfd, (struct sockaddr*)&server_addr, server_len) < 0)
     {
-        printf("Bind failed to port %d\n", HTTP_PORT);
+        printf("Bind failed to port %d\n", HTTP_PORT); 
         
         close(sockfd);
         exit(1);

@@ -19,12 +19,13 @@ struct Node* init_tree()
     }
 
     char buffer[READSIZE];
-    int n = read(fd, buffer, sizeof(buffer));
+    int n = read(fd, buffer, sizeof(buffer) - 1);
     if(n < 0)
     {
-        printf("Read failed in tree");
+        printf("Read failed in tree\n");
         return NULL;
     }
+    buffer[n] = '\0';
 
     char* tokptr;
     char *line = NULL;
@@ -66,8 +67,17 @@ struct Node* add_node(struct Node* head, char* filename)
         return NULL;
     }
 
-    new_node->path = malloc(strlen(filename));
-    strncpy(new_node->path, filename, strlen(filename));
+    printf("filename: %s\n", filename);
+    new_node->path = strdup(filename);
+    if (!new_node->path) 
+    {
+        printf("strdup failed\n");
+        free(new_node);
+        return NULL;
+    }
+
+    new_node->left = NULL;
+    new_node->right = NULL;
 
     unsigned int path_hash = hashPath(filename);
     printf("filehash: %d\n", path_hash);
@@ -87,13 +97,15 @@ struct Node* add_node(struct Node* head, char* filename)
     new_node->file_hash = file_hash;
 
     printf("In main: %d\n", new_node->file_hash);
+    printf("Head: %d\n", new_node->file_hash);
 
-    if(!head)
+    if(head == NULL)
     {
         printf("Head failed\n");
         return new_node;
     }
 
+    printf("Before inserting node\n");
     printf("Inserting node: %s", new_node->path);
     insert_node(head, new_node);
 
@@ -174,7 +186,7 @@ void insert_node(struct Node* head, struct Node* new_node)
             printf("same key\n");
             return;
         }
-        else if(curr->path_hash < new_node->path_hash)
+        else if(curr->path_hash > new_node->path_hash)
         {
             if(!curr->left)
             {
@@ -208,7 +220,7 @@ void printTree(struct Node* curr, int level)
     for (int i = 0; i < level; i++)
         printf(i == level - 1 ? "|-" : "  ");
 
-    printf("%s: %d\n", curr->path, curr->path_hash);
+    printf("%s: %u\n", curr->path, curr->path_hash);
     printTree(curr->left, level + 1);
     printTree(curr->right, level + 1);
 }

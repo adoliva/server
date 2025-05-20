@@ -5,13 +5,16 @@ volatile sig_atomic_t SIGNAL_FLAG = 0;
 void signal_handler(int signum) 
 {
     (void) signum;
+    printf("Signal Flag Recieved\n");
     SIGNAL_FLAG = 1;
 }
 
+volatile sig_atomic_t TREE_FLAG = 0;
 void updateTree(int signum)
 {
     (void) signum;
-    printf("Signal Recieved at pid:%d\n", getpid());
+    printf("Tree Flag Recieved\n");
+    TREE_FLAG = 1;
 }
 
 
@@ -67,11 +70,12 @@ int main(int argc, char** argv)
     {
         printf("Usage <sudo ./server>\n");
         exit(1);
-    }
+    } 
 
-    signal(SIGINT, signal_handler);
+    signal(SIGINT, updateTree);
     signal(SIGTERM, signal_handler); 
-    signal(SIGUSR1, updateTree);  
+    signal(SIGQUIT, signal_handler);
+    //signal(SIGUSR1, updateTree);  
 
     (void) argv;
 
@@ -201,12 +205,29 @@ int main(int argc, char** argv)
 
     while(SIGNAL_FLAG == 0)
     {
+        //If file was modified & reset signal recieved
+        if(TREE_FLAG == 1)  
+        {
+            free_tree(tree_head); 
+            printf("Freed tree\n");
+
+            tree_head->left = NULL;
+            tree_head->right = NULL;
+            tree_head = NULL; 
+
+            tree_head = init_tree();
+            curr = tree_head;
+            printTree(curr, 0);
+
+            TREE_FLAG = 0;
+        } 
+
         FD_ZERO(&http_read_fds);
         FD_SET(http_sock, &http_read_fds);
 
         FD_ZERO(&https_read_fds);
         FD_SET(https_sock, &https_read_fds);
-
+  
         int reuse_http_sock = http_sock;
         int reuse_https_sock = https_sock;
 
@@ -221,7 +242,7 @@ int main(int argc, char** argv)
             }
             
             if (http_client_sockets[i] > reuse_http_sock) {
-                reuse_http_sock = http_client_sockets[i];
+                reuse_http_sock = http_client_sockets[i]; 
             }
 
             if (https_client_sockets[i] > reuse_https_sock) {
