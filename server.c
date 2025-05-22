@@ -346,6 +346,32 @@ int main(int argc, char** argv)
                     http_client_sockets[i] = 0;
                     continue;
                 }
+
+                //HTTP/1.1 301 Moved Permanently
+                //Location: https://100.64.18.186/
+                if(client->upgrade_tls)
+                {   
+                    char headers[MAX_RESPONSE];
+                    int header_len = 0;
+                    memset(headers, 0, sizeof(headers));
+
+                    header_len += sprintf(headers + header_len, "%s 301 Moved Permanently\r\n", client->version);
+                    header_len += sprintf(headers + header_len, "Location: https://%s%s\r\n\r\n", IP_REDIRECT, client->path);
+                    
+
+                    if(send(http_client_sockets[i], headers, header_len, 0) < 0)
+                    {
+                        printf("Error sending http response.\n");
+                    }
+
+                    printf("Response:\n%s\n", headers);
+                    master_log(301, client);
+                    free(client);
+                    close(http_client_sockets[i]);
+                    http_client_sockets[i] = 0;
+
+                    continue;
+                }
                 
                 client->client_fd = http_client_sockets[i];
                 client->client_ip = inet_ntoa(client_addr.sin_addr);
@@ -1207,6 +1233,10 @@ char* content_type(char* filepath)
     else if(strstr(filepath, ".ico") != NULL)
     {
         strcpy(type, "image/svg+xml");
+    }
+    else if(strstr(filepath, ".jpg") != NULL)
+    {
+        strcpy(type, "image/jpg");
     }
     else if(strstr(filepath, ".jpeg") != NULL)
     {

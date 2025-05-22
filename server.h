@@ -23,10 +23,14 @@
  
 #define HTTP_PORT 80
 #define HTTPS_PORT 443
+
 #define BACKLOG 20
 #define MAXLINE 4096
+
 #define MAX_RESPONSE 32300
 #define MAX_CLIENTS 50
+
+#define IP_REDIRECT "100.64.18.186"
 
 //Milestones
 /*
