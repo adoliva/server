@@ -31,7 +31,8 @@ void init_openssl() {
 }
 
 
-SSL_CTX* create_ssl_context() {
+SSL_CTX* create_ssl_context() 
+{
     const SSL_METHOD *method;
     SSL_CTX *ctx;
 
@@ -40,27 +41,31 @@ SSL_CTX* create_ssl_context() {
     if (!ctx) {
         perror("Unable to create SSL context");
         ERR_print_errors_fp(stderr);
-        exit(EXIT_FAILURE);
+        exit(1);
     }
 
     return ctx;
 }
 
-void configure_ssl_context(SSL_CTX *ctx) {
+void configure_ssl_context(SSL_CTX *ctx) 
+{
 
-    if (SSL_CTX_use_certificate_file(ctx, "/home/remote/server/keys/cert.pem", SSL_FILETYPE_PEM) <= 0) {
+    if (SSL_CTX_use_certificate_file(ctx, "/home/remote/server/keys/cert.pem", SSL_FILETYPE_PEM) <= 0) 
+    {
         ERR_print_errors_fp(stderr);
-        exit(EXIT_FAILURE);
+        exit(1);
     }
 
-    if (SSL_CTX_use_PrivateKey_file(ctx, "/home/remote/server/keys/key.pem", SSL_FILETYPE_PEM) <= 0) {
+    if (SSL_CTX_use_PrivateKey_file(ctx, "/home/remote/server/keys/key.pem", SSL_FILETYPE_PEM) <= 0) 
+    {
         ERR_print_errors_fp(stderr);
-        exit(EXIT_FAILURE);
+        exit(1);
     }
 
-    if (!SSL_CTX_check_private_key(ctx)) {
+    if (!SSL_CTX_check_private_key(ctx)) 
+    {
         fprintf(stderr, "Private key does not match the public certificate\n");
-        exit(EXIT_FAILURE);
+        exit(1);
     }  
 }
 
@@ -72,9 +77,9 @@ int main(int argc, char** argv)
         exit(1);
     } 
 
-    signal(SIGINT, updateTree);
-    signal(SIGTERM, signal_handler); 
-    signal(SIGQUIT, signal_handler);
+    signal(SIGINT, updateTree);           //refresh tree
+    signal(SIGTERM, signal_handler);      //quit program
+    signal(SIGQUIT, signal_handler);      //quit program
     //signal(SIGUSR1, updateTree);  
 
     (void) argv;
@@ -86,6 +91,9 @@ int main(int argc, char** argv)
     init_openssl();
     SSL_CTX *ssl_ctx = create_ssl_context();
     configure_ssl_context(ssl_ctx);
+
+    //Testing only
+    //SSL_CTX *ssl_ctx = NULL;
 
 
     int http_sock, https_sock;
@@ -1090,8 +1098,10 @@ int send_response(struct Node* head, struct Client* client)
     if(client->connection_status)
         header_len += sprintf(headers + header_len, "Connection: keep-alive\r\n");
     
+    printf("Hashingpath: %u\n", lookupNode(head, hashPath(client->full_path)));
+
     //send headers seperately from data
-    if(strncmp(client->method, "GET", 3) == 0) 
+    if(strncmp(client->method, "GET", 3) == 0)   
     {
         off_t file_size = lseek(client->fd, 0, SEEK_END);
         lseek(client->fd, 0, SEEK_SET);

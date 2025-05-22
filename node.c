@@ -244,10 +244,13 @@ unsigned int lookupNode(struct Node* head, unsigned int tag)
         return -1;
     }
 
+    printf("going into hash \n");
+
     while(curr)
     {
         if(!curr)
         {
+            printf("retruning 0\n");
             return 0;
         }
         else if(curr->path_hash == hash)
@@ -255,7 +258,7 @@ unsigned int lookupNode(struct Node* head, unsigned int tag)
             printf("Returning -> %u\n", curr->file_hash);
             return curr->file_hash;
         }
-        else if(curr->path_hash < hash)
+        else if(curr->path_hash > hash)
         {
             curr = curr->left;
         }
