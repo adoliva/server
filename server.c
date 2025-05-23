@@ -380,19 +380,19 @@ int main(int argc, char** argv)
                 client->fd = process_request(client, tree_head);
                 if(client->fd < 0)
                 {
-                    printf("Could not process request\n");
-                    free(client);
+                    printf("Could not process request\n");  
+                    free(client); 
                     close(http_client_sockets[i]);
-                    http_client_sockets[i] = 0;
-                    continue;
-                }
+                    http_client_sockets[i] = 0;        
+                    continue;  
+                }   
                 else if(client->fd == 1) //Cached Response
-                {
-                    printf("Cached Response\n");
+                {   
+                    printf("Cached Response\n");  
                     free(client->full_path);
                     free(client);
                     close(http_client_sockets[i]);
-                    http_client_sockets[i] = 0;
+                    http_client_sockets[i] = 0;  
                     continue;
                 }
 
@@ -935,7 +935,7 @@ int process_request(struct Client* client, struct Node* tree_head)
         return -1;
     }
 
-    //Check Forbidden
+    //Check Forbidden (www)
     if(strcmp(path, "/home/remote/server/webpages/www") == 0)
     {
         printf("Asked for restricted page\n");
@@ -949,10 +949,10 @@ int process_request(struct Client* client, struct Node* tree_head)
     //check hash
     if(client->tag != 0)
     {
-        unsigned int file_hash = lookupNode(tree_head, hashPath(client->full_path));
-        printf("File_hash: %u : client->tag: %u \n", file_hash, client->tag);
+        struct Node* node = lookupNode(tree_head, hashPath(client->full_path));
+        printf("File_hash: %u : client->tag: %u \n", node->file_hash, client->tag);
 
-        if(file_hash == client->tag)
+        if(node->file_hash == client->tag)
         {
             char headers[MAX_RESPONSE];
             int header_len = 0;
@@ -966,12 +966,12 @@ int process_request(struct Client* client, struct Node* tree_head)
             header_len += sprintf(headers + header_len, "ETag: \"%u\"\r\n", client->tag);
             header_len += sprintf(headers + header_len, "Date: %s\r\n", date);
             header_len += sprintf(headers + header_len, "Expires: %s\r\n", week_date);
-            header_len += sprintf(headers + header_len, "Last-Modified: %s\r\n", LAST_MODIFIED);
+            header_len += sprintf(headers + header_len, "Last-Modified: %s\r\n", node->last_modified); //changed to per resource
             header_len += sprintf(headers + header_len, "Server: %s\r\n", SERVER);
             header_len += sprintf(headers + header_len, "Connection: close\r\n\r\n");
 
             if(client->is_ssl)
-            {
+            { 
                 if(SSL_write(client->ssl, headers, header_len) < 0)
                 {
                     printf("Error sending https response.\n");
@@ -1098,7 +1098,7 @@ int send_response(struct Node* head, struct Client* client)
 
         free(date);
         return 0;
-    }
+    }  
 
     char* week_date = get_time(7 * 24 * 60 * 60);
     
@@ -1110,21 +1110,23 @@ int send_response(struct Node* head, struct Client* client)
         master_log(406, client);
         free(date);
         free(week_date);
-        return -1;
+        return -1;   
     }
+
+    struct Node* node = lookupNode(head, hashPath(client->full_path)); 
     
     header_len += sprintf(headers + header_len, "%s 200 OK\r\n", client->version);
     header_len += sprintf(headers + header_len, "Accept-Ranges: bytes\r\n");
     header_len += sprintf(headers + header_len, "Content-Type: %s\r\n", file_type);
-    header_len += sprintf(headers + header_len, "ETag: \"%u\"\r\n", lookupNode(head, hashPath(client->full_path)));
+    header_len += sprintf(headers + header_len, "ETag: \"%u\"\r\n", node->file_hash);
     header_len += sprintf(headers + header_len, "Date: %s\r\n", date);
     header_len += sprintf(headers + header_len, "Expires: %s\r\n", week_date);
-    header_len += sprintf(headers + header_len, "Last-Modified: %s\r\n", LAST_MODIFIED);
+    header_len += sprintf(headers + header_len, "Last-Modified: %s\r\n", node->last_modified);
     header_len += sprintf(headers + header_len, "Server: %s\r\n", SERVER);
     if(client->connection_status)
         header_len += sprintf(headers + header_len, "Connection: keep-alive\r\n");
     
-    printf("Hashingpath: %u\n", lookupNode(head, hashPath(client->full_path)));
+    printf("Hashingpath: %u\n", node->file_hash);
 
     //send headers seperately from data
     if(strncmp(client->method, "GET", 3) == 0)   

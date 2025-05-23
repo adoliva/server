@@ -4,6 +4,9 @@
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <sys/stat.h>
+#include <time.h>
+
 
 struct Node* init_tree()
 {
@@ -43,14 +46,13 @@ struct Node* init_tree()
         head = add_node(head, line);
     }
     printf("DONE\n");
-
     
     if(unlink("results.txt") < 0)
     {
 	    printf("file cannot be deleted\n");
         return NULL;
     }
-    printf("Deleted file\n");
+    printf("Deleted results.txt\n");
 
     return head;
 }
@@ -67,7 +69,7 @@ struct Node* add_node(struct Node* head, char* filename)
         return NULL;
     }
 
-    printf("filename: %s\n", filename);
+    //printf("filename: %s\n", filename);
     new_node->path = strdup(filename);
     if (!new_node->path) 
     {
@@ -80,7 +82,7 @@ struct Node* add_node(struct Node* head, char* filename)
     new_node->right = NULL;
 
     unsigned int path_hash = hashPath(filename);
-    printf("filehash: %d\n", path_hash);
+    //printf("filehash: %d\n", path_hash);
     if(path_hash == 0)
     {
         printf("pathhash failed\n");
@@ -96,8 +98,11 @@ struct Node* add_node(struct Node* head, char* filename)
     }
     new_node->file_hash = file_hash;
 
-    printf("In main: %d\n", new_node->file_hash);
-    printf("Head: %d\n", new_node->file_hash);
+    //printf("In main: %d\n", new_node->file_hash);
+    //printf("Head: %d\n", new_node->file_hash);
+
+
+    new_node->last_modified = update_last_modified(filename);
 
     if(head == NULL)
     {
@@ -105,8 +110,8 @@ struct Node* add_node(struct Node* head, char* filename)
         return new_node;
     }
 
-    printf("Before inserting node\n");
-    printf("Inserting node: %s", new_node->path);
+    //printf("Before inserting node\n");
+    //printf("Inserting node: %s", new_node->path);
     insert_node(head, new_node);
 
     return head;
@@ -114,7 +119,7 @@ struct Node* add_node(struct Node* head, char* filename)
 
 int hashFile(char* filename)
 {
-    printf("Hashing file\n");
+    //printf("Hashing file\n");
     if(!filename)
     {
         printf("Filename was NULL\n");
@@ -153,7 +158,7 @@ int hashFile(char* filename)
         }
     }
 
-    printf("hash in filehash %ld\n", hash);
+    //printf("hash in filehash %ld\n", hash);
     return hash;
 }
 
@@ -173,6 +178,26 @@ int hashPath(char* filename)
         hash = ((hash << 5) + hash) + c;
 
     return hash;
+}
+
+//Mon, 28 Apr 2025 19:18:33 GMT
+char* update_last_modified(char* filename)
+{
+    struct stat file_stat;
+    printf("Filename: %s\n", filename);
+    if (stat(filename, &file_stat) == 0) 
+    {
+        printf("inside loop thing: %s\n", filename);
+        char* time_buf = malloc(READSIZE);
+        if (time_buf == NULL) 
+            return NULL;
+        
+        struct tm *tm_info = gmtime(&file_stat.st_mtime);
+        strftime(time_buf, READSIZE, "%a, %d %b %Y %H:%M:%S GMT", tm_info);
+        
+        return time_buf;
+    }
+    return NULL;
 }
 
 //Once I add the Merkle Tree, I'll change this to a struct Node* return value and return the balanced tree
@@ -225,7 +250,7 @@ void printTree(struct Node* curr, int level)
     printTree(curr->right, level + 1);
 }
 
-unsigned int lookupNode(struct Node* head, unsigned int tag)
+struct Node* lookupNode(struct Node* head, unsigned int tag)
 {
     if(!head)
     {
@@ -241,7 +266,7 @@ unsigned int lookupNode(struct Node* head, unsigned int tag)
     if(hash == 0)
     {
         printf("Hash < 0\n");
-        return -1;
+        return NULL;
     }
 
     printf("going into hash \n");
@@ -251,12 +276,12 @@ unsigned int lookupNode(struct Node* head, unsigned int tag)
         if(!curr)
         {
             printf("retruning 0\n");
-            return 0;
+            return NULL;
         }
         else if(curr->path_hash == hash)
         {
             printf("Returning -> %u\n", curr->file_hash);
-            return curr->file_hash;
+            return curr;
         }
         else if(curr->path_hash > hash)
         {
@@ -268,7 +293,7 @@ unsigned int lookupNode(struct Node* head, unsigned int tag)
         }
     }
 
-    return 0;
+    return NULL;
 }
 
 void free_tree(struct Node* node)
@@ -277,6 +302,7 @@ void free_tree(struct Node* node)
     {
         free_tree(node->right);
         free(node->path);
+        free(node->last_modified);
         free_tree(node->left);
         free(node);
     }
