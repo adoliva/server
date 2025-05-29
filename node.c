@@ -34,6 +34,7 @@ struct Node* init_tree()
     char *line = NULL;
 
     line = strtok_r(buffer, "\n", &tokptr);
+    head = add_node(head, line);
 
     while(1)
     {

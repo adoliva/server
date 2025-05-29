@@ -39,7 +39,6 @@ Snap/0.2 - Added Caching (304)
 */
 
 #define SERVER "Snap/0.2"
-#define LAST_MODIFIED "Mon, 28 Apr 2025 19:18:33 GMT" //Needs fixing to per file
 
 extern volatile sig_atomic_t SIGNAL_FLAG;
 void signal_handler(int signum);

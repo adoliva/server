@@ -30,16 +30,17 @@
 #define MAX_RESPONSE 32300
 #define MAX_CLIENTS 50
 
-#define IP_REDIRECT "100.64.18.186"
+#define IP_REDIRECT "100.64.16.145"
 
 //Milestones
 /*
 Snap/0.1 - Simple Server
 Snap/0.2 - Added Caching (304) 
+Snap/0.3 - HTTPS Support
+Snap 0.4 - GUI (currently in devoelpment)
 */
 
-#define SERVER "Snap/0.2"
-#define LAST_MODIFIED "Mon, 28 Apr 2025 19:18:33 GMT" //Needs fixing to per file
+#define SERVER "Snap/0.3"
 
 extern volatile sig_atomic_t SIGNAL_FLAG;
 void signal_handler(int signum);

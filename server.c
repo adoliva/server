@@ -13,7 +13,7 @@ volatile sig_atomic_t TREE_FLAG = 0;
 void updateTree(int signum)
 {
     (void) signum;
-    printf("Tree Flag Recieved\n");
+    printf("Tree Flag Recieved: %d\n", getpid());
     TREE_FLAG = 1;
 }
 
@@ -80,6 +80,7 @@ int main(int argc, char** argv)
     signal(SIGINT, updateTree);           //refresh tree
     signal(SIGTERM, signal_handler);      //quit program
     signal(SIGQUIT, signal_handler);      //quit program
+    signal(SIGUSR1, signal_handler);      //quit program
     //signal(SIGUSR1, updateTree);  
 
     (void) argv;
@@ -350,7 +351,7 @@ int main(int argc, char** argv)
                 //HTTP/1.1 301 Moved Permanently
                 //Location: https://100.64.18.186/
                 if(client->upgrade_tls)
-                {   
+                {     
                     char headers[MAX_RESPONSE];
                     int header_len = 0;
                     memset(headers, 0, sizeof(headers));
