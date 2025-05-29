@@ -338,7 +338,7 @@ int main(int argc, char** argv)
                 printf("Received from client %d: \n%s", i, request);
 
 
-                struct Client* client = init_request(request, http_client_sockets[i], false);
+                struct Client* client = init_request(request, http_client_sockets[i], NULL);
                 if(client == NULL)
                 {
                     printf("Failed to initialized client\n");
@@ -401,7 +401,7 @@ int main(int argc, char** argv)
                 {
                     if(send_response(tree_head, client) < 0)
                     {
-                        send_code(406, client->client_fd);
+                        send_code(406, client->client_fd, NULL);
                         master_log(406, client);
                         printf("Does not accept filetype(s) html, svg, jpeg\n");
                         free(client->full_path);
@@ -414,7 +414,7 @@ int main(int argc, char** argv)
                 }
                 else if(strncmp(client->method, "POST", 4) == 0 || strncmp(client->method, "PUT", 3) == 0 || strncmp(client->method, "DELETE", 6) == 0 || strncmp(client->method, "CONNECT", 7) == 0 || strncmp(client->method, "PATCH", 5) == 0)
                 {
-                    send_code(501, client->client_fd);
+                    send_code(501, client->client_fd, NULL);
                     master_log(501, client);
                     printf("Methods not Implemented.\n");
                     free(client->full_path);
@@ -425,7 +425,7 @@ int main(int argc, char** argv)
                 }
                 else
                 {
-                    send_code(501, client->client_fd);
+                    send_code(501, client->client_fd, NULL);
                     master_log(501, client);
                     printf("Methods not Implemented\n");
                     free(client->full_path);
@@ -549,7 +549,7 @@ int main(int argc, char** argv)
                 printf("https Recieved %d\n", recv_len);	
                 printf("https Received from client %d: \n%s", i, request);
 
-                struct Client* client = init_request(request, https_client_sockets[i], true);
+                struct Client* client = init_request(request, https_client_sockets[i], ssl);
                 if(client == NULL)
                 {
                     printf("Failed to initialized client\n");
@@ -593,7 +593,7 @@ int main(int argc, char** argv)
                 {
                     if(send_response(tree_head, client) < 0)
                     {
-                        send_code(406, client->client_fd);
+                        send_code(406, client->client_fd, client->ssl);
                         master_log(406, client);
                         printf("Does not accept filetype(s) html, svg, jpeg\n");
                         free(client->full_path);
@@ -607,7 +607,7 @@ int main(int argc, char** argv)
                 }
                 else if(strncmp(client->method, "POST", 4) == 0 || strncmp(client->method, "PUT", 3) == 0 || strncmp(client->method, "DELETE", 6) == 0 || strncmp(client->method, "CONNECT", 7) == 0 || strncmp(client->method, "PATCH", 5) == 0)
                 {
-                    send_code(501, client->client_fd);
+                    send_code(501, client->client_fd, client->ssl);
                     master_log(501, client);
                     printf("Methods not Implemented.\n");
                     free(client->full_path);
@@ -620,7 +620,7 @@ int main(int argc, char** argv)
                 }
                 else
                 {
-                    send_code(501, client->client_fd);
+                    send_code(501, client->client_fd, client->ssl);
                     master_log(501, client);
                     printf("Methods not Implemented\n");
                     free(client->full_path);
@@ -654,7 +654,7 @@ int main(int argc, char** argv)
     return 0;
 }
 
-struct Client* init_request(char* request, int client_fd, bool is_ssl)
+struct Client* init_request(char* request, int client_fd, SSL* ssl)
 {
     char* cpy_request = strdup(request);
 
@@ -662,11 +662,22 @@ struct Client* init_request(char* request, int client_fd, bool is_ssl)
     if(!client)
     {
         printf("Unable to allocate space for client.\n");
-        send_code(500, client_fd);
+        if(ssl)
+            send_code(500, client_fd, ssl);
+        else
+            send_code(500, client_fd, NULL);
         return NULL;
     }
 
     memset(client, 0, sizeof(struct Client));
+
+    if(ssl)
+    {
+        client->is_ssl = 1;
+        client->ssl = ssl;
+    }
+    else
+        client->is_ssl = 0;
 
     char* tokptr;
     char *line = NULL;   
@@ -676,7 +687,7 @@ struct Client* init_request(char* request, int client_fd, bool is_ssl)
     if(line == NULL)
     {
         printf("Empty Request\n");
-        send_code(400, client_fd);
+        send_code(400, client_fd, client->ssl);
         master_log(400, client);
         free(client);
         return NULL;
@@ -688,7 +699,7 @@ struct Client* init_request(char* request, int client_fd, bool is_ssl)
     if(client->method == NULL)
     {
         printf("Parse Error: Method\n");
-        send_code(400, client_fd);
+        send_code(400, client_fd, client->ssl);
         master_log(400, client);
         free(cpy_request);
         free(client);
@@ -709,7 +720,7 @@ struct Client* init_request(char* request, int client_fd, bool is_ssl)
     if(client->path == NULL)
     {
         printf("Parse Error: Path\n");
-        send_code(400, client_fd);
+        send_code(400, client_fd, client->ssl);
         master_log(400, client);
         free(client);
         return NULL;
@@ -720,7 +731,7 @@ struct Client* init_request(char* request, int client_fd, bool is_ssl)
     if(client->version == NULL)
     {
         printf("Parse Error: Version\n");
-        send_code(400, client_fd);
+        send_code(400, client_fd, client->ssl);
         master_log(400, client);
         free(client);
         return NULL;
@@ -729,7 +740,7 @@ struct Client* init_request(char* request, int client_fd, bool is_ssl)
     if(strlen(client->version) < 5 && strlen(client->version) > 8)
     {
         printf("Error in version\n");
-        send_code(400, client_fd);
+        send_code(400, client_fd, client->ssl);
         master_log(400, client);
         free(client);
         return NULL;
@@ -743,7 +754,7 @@ struct Client* init_request(char* request, int client_fd, bool is_ssl)
     else
     {
         printf("Version Error\n");
-        send_code(505, client_fd);
+        send_code(505, client_fd, client->ssl);
         master_log(505, client);
         free(client);
         return NULL;
@@ -751,11 +762,6 @@ struct Client* init_request(char* request, int client_fd, bool is_ssl)
 
     //set to 0 - IF NO TAG THIS VALUE WILL BE USED
     client->tag = 0;
-
-    if(is_ssl)
-    {
-        client->is_ssl = 1;
-    }
 
     while((line = strtok_r(NULL, "\r\n", &tokptr)) != NULL)
     {
@@ -875,7 +881,7 @@ int process_request(struct Client* client, struct Node* tree_head)
     if(!client->method)
     {
         printf("Bad Request\n");
-        send_code(500, client->client_fd);
+        send_code(500, client->client_fd, client->ssl);
         master_log(500, client);
         return -1;
     }
@@ -888,7 +894,7 @@ int process_request(struct Client* client, struct Node* tree_head)
     if(strncmp(client->method, "GET", 3) != 0 && strncmp(client->method, "HEAD", 4) != 0)
     {
         printf("Not Implemented\n");
-        send_code(501, client->client_fd);
+        send_code(501, client->client_fd, client->ssl);
         master_log(501, client);
         return 0;
     }
@@ -896,7 +902,7 @@ int process_request(struct Client* client, struct Node* tree_head)
     if(!client->path)
     {
         printf("Bad Request\n");
-        send_code(400, client->client_fd);
+        send_code(400, client->client_fd, client->ssl);
         master_log(400, client);
         return -1;
     }
@@ -929,7 +935,7 @@ int process_request(struct Client* client, struct Node* tree_head)
     if(strstr(path, "..") != NULL)
     {
         printf("Asked for restricted page (..)\n");
-        send_code(403, client->client_fd);
+        send_code(403, client->client_fd, client->ssl);
         master_log(403, client);
         free(client->full_path);
         free(requested_page);
@@ -940,7 +946,7 @@ int process_request(struct Client* client, struct Node* tree_head)
     if(strcmp(path, "/home/remote/server/webpages/www") == 0)
     {
         printf("Asked for restricted page\n");
-        send_code(403, client->client_fd);
+        send_code(403, client->client_fd, client->ssl);
         master_log(403, client);
         free(client->full_path);
         free(requested_page);
@@ -1000,7 +1006,7 @@ int process_request(struct Client* client, struct Node* tree_head)
     if(strcmp(path, "/home/remote/server/webpages/teapot") == 0)
     {
         printf("April fools joke\n");
-        send_code(418, client->client_fd);
+        send_code(418, client->client_fd, client->ssl);
         master_log(418, client);
         free(client->full_path);
         free(requested_page);
@@ -1011,7 +1017,7 @@ int process_request(struct Client* client, struct Node* tree_head)
     if(fd < 0)
     {
         printf("Not opened\n");
-        send_code(404, client->client_fd);
+        send_code(404, client->client_fd, client->ssl);
         master_log(404, client);
         free(client->full_path);
         free(requested_page);
@@ -1107,7 +1113,7 @@ int send_response(struct Node* head, struct Client* client)
     if(!file_type) 
     {
         printf("File_type not supported\n");
-        send_code(406, client->client_fd);
+        send_code(406, client->client_fd, client->ssl);
         master_log(406, client);
         free(date);
         free(week_date);
@@ -1291,7 +1297,7 @@ int master_log(int code, struct Client* client)
     0  -
     -1 -
 */
-int send_code(int code, int client_fd)
+int send_code(int code, int client_fd, SSL* ssl)
 {
     int fd;
     char buffer[MAXLINE];
@@ -1303,6 +1309,12 @@ int send_code(int code, int client_fd)
     strcpy(path,"/home/remote/server/webpages/error_pages");
     char* response = malloc(MAX_RESPONSE);
     char* date = get_time(0);   
+
+    bool is_ssl;
+    if(ssl)
+        is_ssl = 1;
+    else
+        is_ssl = 0;
 
     switch(code)
     {
@@ -1347,8 +1359,16 @@ int send_code(int code, int client_fd)
                 }
             }
             
-            if(send(client_fd, response, strlen(response), 0) < 0)
-                printf("Send Failed\n");
+            if(is_ssl)
+            {
+                if(SSL_write(ssl, response, strlen(response)) < 0)
+                    printf("400 SSL Send Failed\n");
+            }
+            else
+            {
+                if(send(client_fd, response, strlen(response), 0) < 0)
+                    printf("400 Send Failed\n");
+            }
 
             printf("Response: %s\n", response);
             break;
@@ -1378,8 +1398,16 @@ int send_code(int code, int client_fd)
                 }
             }
             
-            if(send(client_fd, response, strlen(response), 0) < 0)
-                printf("Send Failed\n");
+            if(is_ssl)
+            {
+                if(SSL_write(ssl, response, strlen(response)) < 0)
+                    printf("403 SSL Send Failed\n");
+            }
+            else
+            {
+                if(send(client_fd, response, strlen(response), 0) < 0)
+                    printf("403 Send Failed\n");
+            }
 
             break;
         case 404:
@@ -1389,42 +1417,70 @@ int send_code(int code, int client_fd)
             lseek(fd, 0, SEEK_SET);
             
             sprintf(response, "HTTP/1.1 404 Not Found\r\nDate: %s\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Length: %ld\r\nConnection: close\r\n\r\n", date, offset);
-            while(1)
+
+            if(is_ssl)
             {
-                int n = read(fd, buffer, sizeof(buffer));
-                if(n < 0)
+                while(1)
                 {
-                    printf("Read Error in 404");
-                    return -1;
-                }
-                else if(n == 0)
-                {
-                    printf("EOF\n");
-                    break;
-                }
-                else
-                {
-                    strncat(response, buffer, n);
+                    int n = read(fd, buffer, sizeof(buffer));
+                    if(n < 0)
+                    {
+                        printf("Read Error in 404");
+                        return -1;
+                    }
+                    else if(n == 0)
+                    {
+                        printf("EOF\n");
+                        break;
+                    }
+                    else
+                    {
+                        strncat(response, buffer, n);
+                    }
                 }
             }
             
-            if(send(client_fd, response, strlen(response), 0) < 0)
-                printf("Send Failed\n");
+            if(is_ssl)
+            {
+                if(SSL_write(ssl, response, strlen(response)) < 0)
+                    printf("404 SSL Send Failed\n");
+            }
+            else
+            {
+                if(send(client_fd, response, strlen(response), 0) < 0)
+                    printf("404 Send Failed\n");
+            }
 
             break;
         case 406:
 
             sprintf(response, "HTTP/1.1 406 Not Acceptable\r\nDate: %s\r\nServer: Snap/0.1\r\nConnection: close\r\n\r\n", date);
 
-            if(send(client_fd, response, strlen(response), 0) < 0)
-                printf("Send Failed\n");
+            if(is_ssl)
+            {
+                if(SSL_write(ssl, response, strlen(response)) < 0)
+                    printf("406 SSL Send Failed\n");
+            }
+            else
+            {
+                if(send(client_fd, response, strlen(response), 0) < 0)
+                    printf("406 Send Failed\n");
+            }
 
             break;
         case 418:
             sprintf(response, "HTTP/1.1 418 I'm a teapot\r\nContent-Type: text/plain\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", strlen(teapot), teapot);
 
-            if(send(client_fd, response, strlen(response), 0) < 0)
-                printf("418 Send Failed\n");
+            if(is_ssl)
+            {
+                if(SSL_write(ssl, response, strlen(response)) < 0)
+                    printf("418 SSL Send Failed\n");
+            }
+            else
+            {
+                if(send(client_fd, response, strlen(response), 0) < 0)
+                    printf("418 Send Failed\n");
+            }
                 
             break;
         case 500: 
@@ -1434,18 +1490,40 @@ int send_code(int code, int client_fd)
             printf("Not Implemented\n");
             sprintf(response, "HTTP/1.1 501 Not Implemented\r\nConnection: close\r\n\r\n");
 
-            if(send(client_fd, response, strlen(response), 0) < 0)
-                printf("501 Send Failed\n");
+            if(is_ssl)
+            {
+                if(SSL_write(ssl, response, strlen(response)) < 0)
+                    printf("501 SSL Send Failed\n");
+            }
+            else
+            {
+                if(send(client_fd, response, strlen(response), 0) < 0)
+                    printf("501 Send Failed\n");
+            }
 
             break;
         case 505: 
             printf("Version Not Supported\n");
+
+            sprintf(response, "HTTP/1.1 505 Version Not Supported\r\nConnection: close\r\n\r\n");
+
+            if(is_ssl)
+            {
+                if(SSL_write(ssl, response, strlen(response)) < 0)
+                    printf("505 SSL Send Failed\n");
+            }
+            else
+            {
+                if(send(client_fd, response, strlen(response), 0) < 0)
+                    printf("505 Send Failed\n");
+            }
+
             break;
         default:
             printf("I did not understand\n");
             break;
     }
-    printf("Response: %s\n", response);
+    printf("Response: \n%s\n", response);
 
     free(date);
     free(response);

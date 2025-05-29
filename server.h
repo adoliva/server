@@ -81,12 +81,12 @@ struct Client {
     SSL* ssl;
 };
 
-struct Client* init_request(char*, int, bool);
+struct Client* init_request(char*, int, SSL*);
 int process_request(struct Client*, struct Node*);
 int send_response(struct Node*, struct Client*);
 char* get_time(int);
 char* content_type(char*);
 int master_log(int, struct Client*);
-int send_code(int, int);
+int send_code(int, int, SSL*);
 
 #endif 
