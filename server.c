@@ -1267,12 +1267,14 @@ char* content_type(char* filepath)
 
 int master_log(int code, struct Client* client)
 {
+
     int fd = open("/home/remote/server/debug.txt", O_CREAT | O_APPEND | O_WRONLY, 0774);
     if(fd < 0)
     {
         printf("fd open error in log\n");
         return -1;
     }
+    flock(fd, LOCK_SH);
 
     char* date = get_time(0);
     char* response = malloc(MAXLINE);
@@ -1284,6 +1286,8 @@ int master_log(int code, struct Client* client)
         printf("Write error in log\n");
         return -1;
     }
+
+    flock(fd, LOCK_UN);
 
     free(response);
     free(date);
