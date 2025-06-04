@@ -116,11 +116,6 @@ int create_directories(struct Time* time)
             if(!line)
                 break;
         
-            //printf("line: %s\n", line);
-
-            //line += 25;
-            //printf("working with: %s\n", line);
-            
             switch(i)
             {
                 case 0:
@@ -156,7 +151,6 @@ int create_directories(struct Time* time)
                     system(cmd);
                     sprintf(cmd, "sudo chmod 777 /home/remote/server/logs/%s", time->year);
                     system(cmd);
-                    //printf("Made: %s\n", cmd);
                     break;
                 case 1:
                     sprintf(cmd, "mkdir /home/remote/server/logs/%s/%s", time->year, time->month);
@@ -183,7 +177,7 @@ int copy_file(struct Time* time)
     sprintf(path, "/home/remote/server/logs/%s/%s/%s.txt", time->year, time->month, time->day);
     //printf("%s\n", path);
 
-    int copylog_fd = open(path, O_CREAT | O_WRONLY | O_TRUNC, 777);
+    int copylog_fd = open(path, O_CREAT | O_WRONLY | O_TRUNC, 0777);
     if(copylog_fd < 0)
     {
         printf("Failed to open path\n");
