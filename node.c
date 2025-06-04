@@ -38,7 +38,7 @@ struct Node* init_tree()
 
     while(1)
     {
-        line = strtok_r(NULL, "\n", &tokptr);
+        line = strtok_r(NULL, "\n", &tokptr); 
 
         if(!line)
             break;

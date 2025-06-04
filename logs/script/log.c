@@ -154,14 +154,18 @@ int create_directories(struct Time* time)
                 case 0:
                     sprintf(cmd, "mkdir /home/remote/server/logs/%s", time->year);
                     system(cmd);
+                    sprintf(cmd, "sudo chmod 777 /home/remote/server/logs/%s", time->year);
+                    system(cmd);
                     //printf("Made: %s\n", cmd);
                     break;
                 case 1:
                     sprintf(cmd, "mkdir /home/remote/server/logs/%s/%s", time->year, time->month);
                     system(cmd);
-                    //printf("Made: %s\n", cmd);
+                    sprintf(cmd, "sudo chmod 777 /home/remote/server/logs/%s/%s", time->year, time->month);
+                    system(cmd);
                     break;
             }
+            free(cmd);
         }
     }
 

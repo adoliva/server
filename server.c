@@ -1,6 +1,5 @@
 #include "server.h"
 
-//Make head a global that was i can free it easy and dont have to pass it in anywhere.
 volatile sig_atomic_t SIGNAL_FLAG = 0;
 void signal_handler(int signum) 
 {
@@ -18,13 +17,15 @@ void updateTree(int signum)
 }
 
 
-void cleanup_openssl() {
+void cleanup_openssl() 
+{
     EVP_cleanup();
     ERR_free_strings();
 }
 
 
-void init_openssl() {
+void init_openssl() 
+{
     SSL_library_init();
     SSL_load_error_strings();
     OpenSSL_add_all_algorithms();
@@ -1243,6 +1244,14 @@ char* content_type(char* filepath)
     {
         strcpy(type, "image/svg+xml");
     }
+    else if(strstr(filepath, ".css") != NULL)
+    {
+        strcpy(type, "text/css");
+    }
+    else if(strstr(filepath, ".js") != NULL)
+    {
+        strcpy(type, "text/js");
+    }
     else if(strstr(filepath, ".jpg") != NULL)
     {
         strcpy(type, "image/jpg");
@@ -1327,9 +1336,6 @@ int send_code(int code, int client_fd, SSL* ssl)
             break;
         case 201:
             printf("Created\n");
-            break;
-        case 301:
-            printf("Redirected to a different place\n");
             break;
         case 304:
             
@@ -1527,7 +1533,7 @@ int send_code(int code, int client_fd, SSL* ssl)
             printf("I did not understand\n");
             break;
     }
-    printf("Response: \n%s\n", response);
+    printf("Error Response: \n%s\n", response);
 
     free(date);
     free(response);
